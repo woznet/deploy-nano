@@ -1,9 +1,28 @@
 #!/bin/bash
 set -e
-if [[ ! $(which nvm) ]]; then
+
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+log() {
+    echo -e "${BLUE}[$(date +'%T')]${NC} ${GREEN}$1${NC}"
+}
+
+main() {
+    log "Starting NVM installation..."
+
+    log "Downloading and running NVM install script..."
     curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
 
-    NVM_DIR="$([ -z "${XDG_CONFIG_HOME-}" ] && printf %s "${HOME}/.nvm" || printf %s "${XDG_CONFIG_HOME}/nvm")"
-    export NVM_DIR
-    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh" # This loads nvm
+    log "Loading NVM into the current session..."
+    export NVM_DIR="$HOME/.nvm"
+    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+
+    log "NVM installed successfully."
+}
+if [ ! -d "$HOME/.nvm" ]; then
+    main
+else
+    log "NVM is already installed. Skipping."
 fi

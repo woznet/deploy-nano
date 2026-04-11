@@ -6,8 +6,6 @@ ORANGE_RED='\033[38;2;255;69;0m'
 NC='\033[0m'
 
 # Configuration variables shared across all scripts
-DOTNET_CONFIG_URL='https://raw.githubusercontent.com/Woznet/deploy-nano/main/ubuntu/config/dotnet-mspkgs'
-DOTNET_PROFILE_URL='https://raw.githubusercontent.com/Woznet/deploy-nano/main/ubuntu/config/dotnet-cli-config.sh'
 PWSH_PROFILE_URL='https://raw.githubusercontent.com/Woznet/deploy-nano/main/ubuntu/config/profile.ps1'
 PWSH_CONFIG_URL='https://raw.githubusercontent.com/Woznet/deploy-nano/main/ubuntu/config/Invoke-ConfigPwsh.ps1'
 BASHRC_URL='https://raw.githubusercontent.com/Woznet/deploy-nano/main/ubuntu/config/.bashrc'
@@ -20,12 +18,11 @@ DISABLE_IPV6_URL='https://raw.githubusercontent.com/Woznet/deploy-nano/main/ubun
 NANO_SYNTAX_TEMP_PATH='/tmp/nanosyntaxpath.tmp'
 NANO_BUILD_TEMP_PATH='/tmp/nanobuildpath.tmp'
 
-DOCKER_INSTALL_SCRIPT_URL='https://raw.githubusercontent.com/Woznet/deploy-nano/main/ubuntu/config/install-docker.sh'
 NANO_SYNTAX_REPO='https://github.com/galenguyer/nano-syntax-highlighting.git'
 
 export DEBIAN_FRONTEND=noninteractive
 
-# Check for required commands
+# Define the functions that will be used in the script
 check_dependency() {
     command -v "$1" >/dev/null 2>&1 || {
         echo -e "${ORANGE_RED}Error: Required command '$1' not found.${NC}\n" >&2
@@ -33,15 +30,98 @@ check_dependency() {
     }
 }
 
-for cmd in curl tee chmod mkdir date sudo; do
-    check_dependency "$cmd"
-done
+setup_completions() {
+    echo "Deploying shell completions..."
 
-LOGFILE="$HOME/temp/deploy-config_$(date +%Y%m%d_%H%M%S).log"
+    # Define variables locally to prevent global scope leakage
+    local target_dir timestamp error_log error_msg
+    target_dir="$HOME/.local/share/bash-completion/completions"
+    timestamp=$(date +'%Y%m%d_%H%M%S')
+    error_log="error_log_${timestamp}.txt"
+    error_msg=""
 
-mkdir --parents "$(dirname "$LOGFILE")" > /dev/null
-touch "$LOGFILE" > /dev/null
-chmod 0644 "$LOGFILE" > /dev/null
+    # 1. Proactively create the target directory
+    mkdir -p "$target_dir"
+
+    # Table for command-based completions
+    local -A command_completions=(
+        [op]='op completion bash'
+        [pip]='pip completion --bash'
+        [npm]='npm completion bash'
+        [rclone]='rclone completion bash'
+        [ngrok]='ngrok completion bash'
+        [gh]='gh completion --shell bash'
+        [dotnet]='dotnet completions script bash'
+    )
+
+    # Table for URL-based completions
+    local -A url_completions=(
+        [tldr]='https://raw.githubusercontent.com/tldr-pages/tldr-node-client/main/bin/completion/bash/tldr'
+        [clang]='https://raw.githubusercontent.com/llvm-mirror/clang/master/utils/bash-autocomplete.sh'
+        [az]='https://raw.githubusercontent.com/Azure/azure-cli/dev/az.completion'
+    )
+
+    # ---------------------------------------------------------
+    # Process Command-based Completions
+    # ---------------------------------------------------------
+    for key in "${!command_completions[@]}"; do
+        local value output_file
+        value="${command_completions[$key]}"
+        output_file="${target_dir}/${key}" # Removed _completion suffix
+
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [INFO] Generating command completion for key: $key" | tee -a "$error_log"
+
+        # Ensure the command exists before generating
+        local command_name
+        command_name=$(echo "$value" | awk '{print $1}')
+        if ! command -v "$command_name" &>/dev/null; then
+            error_msg="[$key] Command '$command_name' not found. Skipping."
+            echo -e "${ORANGE_RED}${error_msg}${NC}"
+            echo "[$(date)] $error_msg" >>"$error_log"
+            continue
+        fi
+
+        # Generate output directly into the file (No sudo or tee needed)
+        if eval "$value" >"$output_file" 2>>"$error_log"; then
+            chmod 644 "$output_file"
+            echo "[$(date '+%Y-%m-%d %H:%M:%S')] [INFO] Successfully generated $key completion. Saved to $output_file." | tee -a "$error_log"
+        else
+            error_msg="[$key] Failed to generate output for '$value'. Skipping."
+            echo -e "${ORANGE_RED}${error_msg}${NC}"
+            echo "[$(date)] $error_msg" >>"$error_log"
+        fi
+    done
+
+    # ---------------------------------------------------------
+    # Process URL-based Completions
+    # ---------------------------------------------------------
+    for key in "${!url_completions[@]}"; do
+        local value output_file
+        value="${url_completions[$key]}"
+        output_file="${target_dir}/${key}" # Removed _completion suffix
+
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [INFO] Downloading URL completion for key: $key from $value" | tee -a "$error_log"
+
+        # Download directly (No sudo needed)
+        if ! curl -fsSL "$value" -o "$output_file"; then
+            error_msg="[$key] Failed to download completion script from $value"
+            echo -e "${ORANGE_RED}${error_msg}${NC}"
+            echo "[$(date)] $error_msg" >>"$error_log"
+            continue
+        fi
+
+        if ! chmod 644 "$output_file"; then
+            error_msg="[$key] Failed to set permissions on $output_file."
+            echo -e "${ORANGE_RED}${error_msg}${NC}"
+            echo "[$(date)] $error_msg" >>"$error_log"
+            continue
+        fi
+
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [INFO] Successfully downloaded $key completion. Saved to $output_file." | tee -a "$error_log"
+    done
+
+    echo "All completion scripts have been processed."
+}
 
 error_handler() {
     local exit_status=$?
@@ -50,8 +130,6 @@ error_handler() {
     log_error "Error occurred at or near line ${line_no}. Exit status: ${exit_status}"
     exit $exit_status
 }
-
-trap 'error_handler $LINENO' ERR
 
 log() {
     local message="$1"
@@ -119,20 +197,26 @@ download_file() {
 }
 
 source_external_script() {
-    local url="$1"
-    local tmp_file="/tmp/temp_script.sh"
+    local tmp_file url
+    url="$1"
+    tmp_file="/tmp/temp_script.sh"
+
     if ! curl -fsSL "$url" -o "$tmp_file"; then
         echo -e "${ORANGE_RED}Failed to download script from $url${NC}\n"
         log_error "Failed to download script from $url"
         exit 1
     fi
+
     if [ ! -s "$tmp_file" ]; then
         echo -e "${ORANGE_RED}Downloaded script from $url is empty.${NC}\n"
         log_error "Downloaded script from $url is empty."
         rm -f "$tmp_file"
         exit 1
     fi
+
+    # shellcheck source=/dev/null
     source "$tmp_file"
+
     rm -f "$tmp_file"
 }
 
@@ -156,7 +240,7 @@ install_updates() {
 
 install_software() {
     log 'Starting installation of required software packages...'
-    run_command 'sudo DEBIAN_FRONTEND=noninteractive apt install -qq -y apt-transport-https aptitude aptitude-doc-en curl software-properties-common git autopoint build-essential devhelp devhelp-common freetype2-doc g++-multilib gcc-multilib wget xdg-utils glibc-doc glibc-doc-reference glibc-source groff groff-base language-pack-en language-pack-en-base clang libasprintf-dev libbsd-dev libc++-dev libc6 libc6-dev libcairo2-dev libcairo2-doc libc-ares-dev python3-pip libc-dev libev-dev libgettextpo-dev libgirepository1.0-dev libglib2.0-doc libice-doc libmagic1 ca-certificates libmagic-dev libmagick++-dev libmagics++-dev libncurses5-dev libncurses-dev libncursesw5-dev python-is-python3 libsm-doc libx11-doc libxcb-doc libxext-doc libxml2-utils ncurses-doc pkg-config zlib1g-dev net-tools gpg ffmpeg ffmpeg-doc most openssh-client openssh-known-hosts python3 python3-doc p7zip p7zip-full p7zip-rar policykit-1 policykit-1-doc policykit-1-gnome policykit-desktop-privileges rclone unzip zip unrar-free > /dev/null'
+    run_command '    > /dev/null'
     log 'Software installation completed successfully.'
 }
 
@@ -177,22 +261,25 @@ configure_userenv() {
     download_file "$BASHRC_URL" "$HOME/.bashrc"
     download_file "$BASH_ALIASES_URL" "$HOME/.bash_aliases"
 
-    run_command 'sudo cp --force ~/.bashrc /root/.bashrc'
-    run_command 'sudo ln --force ~/.bash_aliases /root/.bash_aliases'
+    # BUGFIX: Changed ~ to $HOME and wrapped in double quotes for safe variable expansion
+    run_command "sudo cp --force $HOME/.bashrc /root/.bashrc"
+    run_command "sudo ln --force $HOME/.bash_aliases /root/.bash_aliases"
 
-    log 'Configuring sudoers,inputrc and needrestart.conf...'
+    log 'Configuring sudoers, inputrc and needrestart.conf...'
     download_file "$SUDOERS_URL" '/etc/sudoers.d/woz'
     download_file "$INPUTRC_URL" '/etc/inputrc'
     download_file "$DISABLE_IPV6_URL" '/etc/sysctl.d/20-disable-ipv6.conf'
-    if [[ -f "/etc/needrestart/needrestart.conf" ]]; then
-        run_command sudo sed -i.bak -e 's/^#[[:space:]]*\$nrconf{verbosity}[[:space:]]*=[[:space:]]*2;$/\$nrconf{verbosity} = 0;/' /etc/needrestart/needrestart.conf
-    fi
-    # sudo sed -i.bak 's/^#[[:space:]]*\$nrconf{verbosity}[[:space:]]*=[[:space:]]*2;$/\$nrconf{verbosity} = 0;/' file.conf
 
+    if [[ -f "/etc/needrestart/needrestart.conf" ]]; then
+        # BUGFIX: Wrapped the entire command in double quotes for run_command.
+        # Escaped the $ signs (\$) so ShellCheck is happy and Bash ignores the Perl variables.
+        run_command "sudo sed -i.bak -e 's/^#[[:space:]]*\$nrconf{verbosity}[[:space:]]*=[[:space:]]*2;\$/\$nrconf{verbosity} = 0;/' /etc/needrestart/needrestart.conf"
+    fi
 
     log 'Creating user directories...'
     for dir in "$HOME/git" "$HOME/temp" "$HOME/dev"; do
-        [ -d "$dir" ] || run_command "mkdir '$dir'"
+        # Added -p to mkdir so it doesn't error out if the directory already exists
+        [ -d "$dir" ] || run_command "mkdir -p '$dir'"
     done
 
     log 'User environment configuration setup completed successfully.'
@@ -206,9 +293,14 @@ remove_rhythmbox() {
 
 generate_ssh_keys() {
     log 'Checking for existing SSH keys...'
+
     if [ ! -f "$HOME/.ssh/id_rsa" ]; then
-        log 'Creating SSH key at ~/.ssh/id_rsa'
-        run_command 'ssh-keygen -t rsa -b 4096 -C "$(id --name --user)@$(hostname --fqdn)" -N "" -f ~/.ssh/id_rsa'
+        log "Creating SSH key at $HOME/.ssh/id_rsa"
+
+        # BUGFIX: Wrapped in double quotes so $(id) and $(hostname) actually execute.
+        # Swapped ~ to $HOME for reliable path resolution.
+        run_command "ssh-keygen -t rsa -b 4096 -C \"$(id --name --user)@$(hostname --fqdn)\" -N '' -f \"$HOME/.ssh/id_rsa\""
+
         log 'SSH key generated successfully.'
     else
         # echo -e "${ORANGE_RED}Warning: SSH key already exists. Skipping key generation.${NC}\n"
@@ -218,12 +310,18 @@ generate_ssh_keys() {
 
 install_gh() {
     log 'Starting installation of GitHub CLI...'
-    if [[ ! $(command -v gh) ]]; then
+
+    # BUGFIX: Test the exit code directly, no subshell or brackets needed
+    if ! command -v gh &>/dev/null; then
         run_command 'curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg'
         run_command 'sudo chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg'
-        run_command 'echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list'
+
+        # BUGFIX: Outer double quotes so $(dpkg ...) expands. Escaped inner double quotes. Added >/dev/null for silence.
+        run_command "echo \"deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main\" | sudo tee /etc/apt/sources.list.d/github-cli.list >/dev/null"
+
         run_command 'sudo DEBIAN_FRONTEND=noninteractive apt update -qq > /dev/null'
         run_command 'sudo DEBIAN_FRONTEND=noninteractive apt install -qq -y gh > /dev/null'
+
         log 'GitHub CLI installation completed successfully.'
     else
         echo -e "${ORANGE_RED}Warning: GitHub CLI is already installed. Skipping installation.${NC}\n"
@@ -233,20 +331,78 @@ install_gh() {
 
 install_pwsh() {
     log 'Starting installation of PowerShell...'
-    if [[ ! $(command -v pwsh) ]]; then
-        run_command 'source /etc/os-release'
+
+    # BUGFIX: Clean, direct command testing
+    if ! command -v pwsh &>/dev/null; then
+
+        # BUGFIX: Run source directly in the script so $ID and $VERSION_ID are loaded into memory
+        source /etc/os-release
+
         run_command 'sudo apt update -qq > /dev/null'
-        run_command 'wget -q "https://packages.microsoft.com/config/$ID/$VERSION_ID/packages-microsoft-prod.deb"'
+
+        # BUGFIX: Double quotes on the outside so the variables expand.
+        run_command "wget -q \"https://packages.microsoft.com/config/$ID/$VERSION_ID/packages-microsoft-prod.deb\""
+
         run_command 'sudo dpkg -i packages-microsoft-prod.deb > /dev/null'
         run_command 'sudo DEBIAN_FRONTEND=noninteractive apt update -qq > /dev/null'
-        run_command 'rm packages-microsoft-prod.deb > /dev/null'
+
+        # Added -f for safety
+        run_command 'rm -f packages-microsoft-prod.deb > /dev/null'
+
         run_command 'sudo DEBIAN_FRONTEND=noninteractive apt install -qq -y powershell > /dev/null'
+
+        # (This line was already perfectly quoted by you! Great job on escaping those inner quotes)
         run_command "sudo pwsh -NoProfile -Command \"Invoke-Expression ([System.Net.WebClient]::new().DownloadString('$PWSH_CONFIG_URL'))\" > /dev/null"
+
         download_file "$PWSH_PROFILE_URL" '/opt/microsoft/powershell/7/profile.ps1'
         log 'PowerShell installation completed successfully.'
     else
         echo -e "${ORANGE_RED}Warning: PowerShell is already installed. Skipping installation.${NC}\n"
         log 'PowerShell is already installed.'
+    fi
+}
+
+install_1password() {
+
+    log "Starting 1Password and 1Password CLI installation..."
+    if ! command -v 1password &>/dev/null || ! command -v op &>/dev/null; then
+        # 1. Add the GPG key
+        log "Adding 1Password GPG key..."
+        # Using --yes to prevent gpg from hanging if the key already exists
+        curl -sS https://downloads.1password.com/linux/keys/1password.asc |
+            sudo gpg --yes --dearmor --output /usr/share/keyrings/1password-archive-keyring.gpg
+
+        # 2. Add the apt repository
+        log "Configuring the 1Password apt repository..."
+        local arch
+        arch=$(dpkg --print-architecture)
+
+        # We use double quotes here so the $arch variable expands correctly
+        echo "deb [arch=$arch signed-by=/usr/share/keyrings/1password-archive-keyring.gpg] https://downloads.1password.com/linux/debian/$arch stable main" |
+            sudo tee /etc/apt/sources.list.d/1password.list >/dev/null
+
+        # 3. Configure debsig-verify policy
+        # 1Password uses this to verify the digital signatures of their .deb packages
+        log "Configuring debsig-verify policies for package security..."
+        sudo mkdir -p /etc/debsig/policies/AC2D62742012EA22/
+
+        curl -sS https://downloads.1password.com/linux/debian/debsig/1password.pol |
+            sudo tee /etc/debsig/policies/AC2D62742012EA22/1password.pol >/dev/null
+
+        sudo mkdir -p /usr/share/debsig/keyrings/AC2D62742012EA22
+
+        curl -sS https://downloads.1password.com/linux/keys/1password.asc |
+            sudo gpg --yes --dearmor --output /usr/share/debsig/keyrings/AC2D62742012EA22/debsig.gpg
+
+        # 4. Install both packages
+        log "Updating apt and installing 1Password and CLI..."
+        sudo DEBIAN_FRONTEND=noninteractive apt-get update -qq
+        sudo DEBIAN_FRONTEND=noninteractive apt-get install -qq -y 1password 1password-cli
+
+        log "1Password and 1Password CLI installed successfully!"
+    else
+        echo -e "${ORANGE_RED}Warning: 1Password and 1Password CLI are already installed. Skipping installation.${NC}\n"
+        log '1Password and 1Password CLI are already installed.'
     fi
 }
 
@@ -308,21 +464,48 @@ get_latest_nano_version() {
 
 download_nano() {
     log 'Downloading nano source...'
-    cd "$HOME/temp"
+
+    # Safely change directory, or exit if it fails
+    cd "$HOME/temp" || {
+        log_error "Failed to cd to $HOME/temp"
+        exit 1
+    }
+
     run_command 'sudo rm --recursive --force ./nano-* > /dev/null'
-    run_command 'wget -q "${NANO_SOURCE_URL}"'
-    run_command 'tar xfz "nano-${NANO_LATEST_VERSION}.tar.gz" > /dev/null'
-    readlink -f $(printf 'nano-%s' "$NANO_LATEST_VERSION") >"$NANO_BUILD_TEMP_PATH"
+
+    # Using double quotes on the outside so variables expand properly
+    run_command "wget -q '${NANO_SOURCE_URL}'"
+    run_command "tar xfz 'nano-${NANO_LATEST_VERSION}.tar.gz' > /dev/null"
+
+    # Command substitution properly quoted
+    readlink -f "$(printf 'nano-%s' "$NANO_LATEST_VERSION")" >"$NANO_BUILD_TEMP_PATH"
+
     log 'Downloaded and extracted nano source successfully.'
 }
 
 build_nano() {
     log 'Configuring and building nano...'
-    cd "$(cat "$NANO_BUILD_TEMP_PATH")"
-    run_command "sudo ./configure --prefix=/usr --sysconfdir=/etc --enable-utf8 --enable-color --enable-extra --enable-nanorc --enable-multibuffer --docdir=/usr/share/doc/nano-${NANO_LATEST_VERSION} > /dev/null"
-    run_command 'sudo make > /dev/null'
+
+    # 1. Safely enter the directory
+    local build_dir
+    build_dir=$(cat "$NANO_BUILD_TEMP_PATH")
+    cd "$build_dir" || {
+        log "Failed to enter build directory: $build_dir"
+        exit 1
+    }
+
+    # 2. Configure and Make WITHOUT sudo.
+    # Added --enable-libmagic to utilize the libmagic-dev package we installed earlier!
+    run_command "./configure --prefix=/usr --sysconfdir=/etc --enable-utf8 --enable-color --enable-extra --enable-nanorc --enable-multibuffer --enable-libmagic --docdir=/usr/share/doc/nano-${NANO_LATEST_VERSION} > /dev/null"
+
+    run_command 'make > /dev/null'
+
+    # 3. Only the final installation requires sudo
     run_command 'sudo make install > /dev/null'
-    run_command "sudo install -v -m644 doc/{nano.html,sample.nanorc} /usr/share/doc/nano-${NANO_LATEST_VERSION} > /dev/null"
+
+    # 4. BUGFIX: Explicitly list both files instead of using brace expansion inside double quotes
+    run_command "sudo install -v -m644 doc/nano.html doc/sample.nanorc \"/usr/share/doc/nano-${NANO_LATEST_VERSION}\" > /dev/null"
+
     log 'Configured, built and installed nano successfully.'
 }
 
@@ -381,6 +564,60 @@ run_non_critical() {
     fi
 }
 
+download_standalone_scripts_api() {
+    log "Querying GitHub API for standalone scripts..."
+
+    local target_dir="$HOME/dev/scripts"
+
+    # The GitHub REST API endpoint for your specific repository folder
+    local api_url="https://api.github.com/repos/Woznet/deploy-nano/contents/ubuntu/config/install"
+
+    mkdir -p "$target_dir"
+
+    local download_urls
+    download_urls=$(curl -sSL "$api_url" | jq -r '.[].download_url | select(. != null)')
+
+    if [[ -z "$download_urls" ]]; then
+        echo -e "${ORANGE_RED}Failed to retrieve script list from GitHub API. Check repo path or API limits.${NC}\n"
+        log_error "GitHub API returned no download URLs for $api_url"
+        return 1
+    fi
+
+    while read -r url; do
+        if [[ -n "$url" ]]; then
+            local file
+            file=$(basename "$url")
+
+            log "Downloading $file..."
+
+            if curl -fsSL "$url" -o "$target_dir/$file"; then
+                chmod +x "$target_dir/$file"
+                log "Successfully saved and made executable: $file"
+            else
+                echo -e "${ORANGE_RED}Failed to download $file${NC}\n"
+                log_error "Failed to download $file from $url"
+            fi
+        fi
+    done <<<"$download_urls"
+
+    log "All standalone scripts dynamically synced to $target_dir"
+}
+
+# Main script execution starts here
+
+# Check for required commands
+for cmd in curl tee chmod mkdir date sudo; do
+    check_dependency "$cmd"
+done
+
+LOGFILE="$HOME/temp/deploy-config_$(date +%Y%m%d_%H%M%S).log"
+
+mkdir --parents "$(dirname "$LOGFILE")" >/dev/null
+touch "$LOGFILE" >/dev/null
+chmod 0644 "$LOGFILE" >/dev/null
+
+trap 'error_handler $LINENO' ERR
+
 # Starting function execution
 log 'Starting critical function execution.'
 set_timezone || log_error 'set_timezone'
@@ -391,21 +628,16 @@ configure_userenv || log_error 'configure_userenv'
 
 NANO_INSTALLED_VERSION=$(get_installed_nano_version)
 NANO_LATEST_VERSION=$(get_latest_nano_version)
+NANO_LATEST_MAJOR_VERSION="${NANO_LATEST_VERSION%%.*}"
 SHOULD_INSTALL_NANO=$(should_install_nano)
-NANO_SOURCE_URL="https://nano-editor.org/dist/v8/nano-${NANO_LATEST_VERSION}.tar.gz"
+NANO_SOURCE_URL="https://nano-editor.org/dist/v${NANO_LATEST_MAJOR_VERSION}/nano-${NANO_LATEST_VERSION}.tar.gz"
 
 log 'Starting non-critical function execution.'
 run_non_critical 'remove_rhythmbox'
-# run_non_critical 'configure_dotnet'
 run_non_critical 'generate_ssh_keys'
 run_non_critical 'install_gh'
-# run_non_critical 'install_nvm'
 run_non_critical 'install_pwsh'
-# run_non_critical 'install_vscode'
-# run_non_critical 'install_1password'
-# run_non_critical 'install_az'
-# run_non_critical 'install_ngrok'
-# run_non_critical 'save_docker'
+run_non_critical 'install_1password'
 
 if [ "$SHOULD_INSTALL_NANO" = "1" ]; then
     run_non_critical 'remove_nano'
@@ -416,100 +648,11 @@ if [ "$SHOULD_INSTALL_NANO" = "1" ]; then
     run_non_critical 'set_default_editor'
 fi
 
-# Define the URLs for completions
-TLDR_COMPLETION_URL='https://raw.githubusercontent.com/tldr-pages/tldr-node-client/main/bin/completion/bash/tldr'
-DOTNET_COMPLETION_URL='https://raw.githubusercontent.com/Woznet/deploy-nano/main/ubuntu/config/_completion/dotnet_completion.sh'
-CLANG_COMPLETION_URL='https://raw.githubusercontent.com/llvm-mirror/clang/master/utils/bash-autocomplete.sh'
-AZ_COMPLETION_URL='https://raw.githubusercontent.com/Azure/azure-cli/dev/az.completion'
+log "Setting up shell autocompletions..."
+setup_completions || log_error 'setup_completions'
 
-# Table for command-based completions
-declare -A command_completions=(
-    # [op]='op completion bash'
-    [pip]='pip completion --bash'
-    # [npm]='npm completion bash'
-    # [rclone]='rclone completion bash'
-    # [ngrok]='ngrok completion bash'
-    [gh]='gh completion --shell bash'
-)
-
-# Table for URL-based completions
-declare -A url_completions=(
-    [tldr]="$TLDR_COMPLETION_URL"
-    # [dotnet]="$DOTNET_COMPLETION_URL"
-    # [clang]="$CLANG_COMPLETION_URL"
-    # [az]="$AZ_COMPLETION_URL"
-)
-
-completions_target_dir='/etc/bash_completion.d'
-timestamp=$(date +'%Y%m%d_%H%M%S')
-error_log="error_log_${timestamp}.txt"
-
-if [[ ! -d "$completions_target_dir" ]]; then
-    error_msg="Target directory $completions_target_dir does not exist."
-    echo -e "${ORANGE_RED}${error_msg}${NC}"
-    echo "[$(date)] $error_msg" >>"$error_log"
-    exit 1
-fi
-
-# Process command completions
-for key in "${!command_completions[@]}"; do
-    value="${command_completions[$key]}"
-    output_file="${completions_target_dir}/${key}_completion"
-
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [INFO] Generating command completion for key: $key" | tee -a "$error_log"
-
-    # Ensure the command exists before generating the completion output
-    command_name=$(echo "$value" | awk '{print $1}')
-    if ! command -v "$command_name" &>/dev/null; then
-        error_msg="[$key] Command '$command_name' not found. Skipping."
-        echo -e "${ORANGE_RED}${error_msg}${NC}"
-        echo "[$(date)] $error_msg" >>"$error_log"
-        continue
-    fi
-
-    completion_output=$(eval "$value" 2>&1)
-    if [[ -z "$completion_output" ]]; then
-        error_msg="[$key] Command '$value' produced no output. Skipping."
-        echo -e "${ORANGE_RED}${error_msg}${NC}"
-        echo "[$(date)] $error_msg" >>"$error_log"
-        continue
-    fi
-
-    echo "$completion_output" | sudo tee "$output_file" >/dev/null
-    if ! sudo chmod 644 "$output_file"; then
-        error_msg="[$key] Failed to set permissions on $output_file."
-        echo -e "${ORANGE_RED}${error_msg}${NC}"
-        echo "[$(date)] $error_msg" >>"$error_log"
-        continue
-    fi
-
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [INFO] Successfully generated $key completion. Saved to $output_file." | tee -a "$error_log"
-done
-
-# Process URL completions
-for key in "${!url_completions[@]}"; do
-    value="${url_completions[$key]}"
-    output_file="${completions_target_dir}/${key}_completion"
-
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [INFO] Downloading URL completion for key: $key from $value" | tee -a "$error_log"
-    if ! sudo curl -fsSL "$value" -o "$output_file"; then
-        error_msg="[$key] Failed to download completion script from $value"
-        echo -e "${ORANGE_RED}${error_msg}${NC}"
-        echo "[$(date)] $error_msg" >>"$error_log"
-        continue
-    fi
-
-    if ! sudo chmod 644 "$output_file"; then
-        error_msg="[$key] Failed to set permissions on $output_file."
-        echo -e "${ORANGE_RED}${error_msg}${NC}"
-        echo "[$(date)] $error_msg" >>"$error_log"
-        continue
-    fi
-
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [INFO] Successfully downloaded $key completion. Saved to $output_file." | tee -a "$error_log"
-done
-
-echo "All completion scripts have been processed."
+log "Saving standalone install scripts from GitHub API..."
+download_standalone_scripts_api || log_error 'download_standalone_scripts_api'
 
 remove_tmpfiles || log_error 'remove_tmpfiles'
 
