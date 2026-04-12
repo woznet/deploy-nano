@@ -63,9 +63,10 @@ main() {
     # 6. Post-installation convenience
     log "Adding current user ($USER) to the docker group..."
     sudo usermod -aG docker "$USER"
+    newgrp docker
 
     log "Docker ecosystem installed successfully!"
-    echo -e "👉 ${BLUE}Note: You must log out and log back in (or restart) for the 'docker' group permissions to take effect.${NC}"
+    echo -e "👉 ${BLUE}Note: 'docker' group permissions have already been applied in this terminal session.${NC}"
 }
 
 # Execute the main function if Docker is not already installed

@@ -13,7 +13,7 @@ BASH_ALIASES_URL='https://raw.githubusercontent.com/Woznet/deploy-nano/main/ubun
 SUDOERS_URL='https://raw.githubusercontent.com/Woznet/deploy-nano/main/ubuntu/config/sudoers.woz'
 INPUTRC_URL='https://raw.githubusercontent.com/Woznet/deploy-nano/main/ubuntu/config/inputrc'
 NANORC_URL='https://raw.githubusercontent.com/Woznet/deploy-nano/main/ubuntu/config/nanorc'
-DISABLE_IPV6_URL='https://raw.githubusercontent.com/Woznet/deploy-nano/main/ubuntu/config/20-disable-ipv6.conf'
+# DISABLE_IPV6_URL='https://raw.githubusercontent.com/Woznet/deploy-nano/main/ubuntu/config/20-disable-ipv6.conf'
 
 NANO_SYNTAX_TEMP_PATH='/tmp/nanosyntaxpath.tmp'
 NANO_BUILD_TEMP_PATH='/tmp/nanobuildpath.tmp'
@@ -268,7 +268,7 @@ configure_userenv() {
     log 'Configuring sudoers, inputrc and needrestart.conf...'
     download_file "$SUDOERS_URL" '/etc/sudoers.d/woz'
     download_file "$INPUTRC_URL" '/etc/inputrc'
-    download_file "$DISABLE_IPV6_URL" '/etc/sysctl.d/20-disable-ipv6.conf'
+    # download_file "$DISABLE_IPV6_URL" '/etc/sysctl.d/20-disable-ipv6.conf'
 
     if [[ -f "/etc/needrestart/needrestart.conf" ]]; then
         # BUGFIX: Wrapped the entire command in double quotes for run_command.

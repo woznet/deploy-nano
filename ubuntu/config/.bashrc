@@ -142,7 +142,7 @@ if [[ -d "$HOME/.nvm" ]]; then
 fi
 
 
-for npm_path in $(which -a npm | grep -v '^/mnt/c/Program Files/nodejs/' | uniq); do
+for npm_path in $(which -a npm | grep -v '^/mnt/c/' | uniq); do
   node_path="$(dirname "$npm_path")/node"
   if [[ -x "$node_path" ]]; then
     echo "Using npm: $npm_path ($( "$npm_path" --version ))"
@@ -160,41 +160,41 @@ done
 #-+-#-+-#-+-#-+-#
 
 # gh bash completion
-if command -v gh >/dev/null 2>&1; then
-  source <(gh completion --shell bash)
-fi
+# if command -v gh >/dev/null 2>&1; then
+#   source <(gh completion --shell bash)
+# fi
 
 # aws bash completion
-if command -v aws >/dev/null 2>&1; then
-  complete -C '/usr/local/bin/aws_completer' aws
-fi
+# if command -v aws >/dev/null 2>&1; then
+#   complete -C '/usr/local/bin/aws_completer' aws
+# fi
 
 # 1Password cli bash completion
-if command -v op >/dev/null 2>&1; then
-  source <(op completion bash)
-fi
+# if command -v op >/dev/null 2>&1; then
+#   source <(op completion bash)
+# fi
 
 # pip bash completion
-if command -v pip >/dev/null 2>&1; then
-  source <(pip completion --bash)
-fi
+# if command -v pip >/dev/null 2>&1; then
+#  source <(pip completion --bash)
+# fi
 
 # dotnet bash completion
 if command -v dotnet >/dev/null 2>&1; then
   export DOTNET_CLI_TELEMETRY_OPTOUT='true'
-  if [[ $(dotnet --version 2>/dev/null | cut -d. -f1) -ge 10 ]]; then
-    source <(dotnet completions script bash)
-  else
-    _dotnet_bash_complete() {
-      local cur="${COMP_WORDS[COMP_CWORD]}" IFS=$'\n'
-      local candidates
-
-      read -d '' -ra candidates < <(dotnet complete --position "${COMP_POINT}" "${COMP_LINE}" 2>/dev/null)
-      read -d '' -ra COMPREPLY < <(compgen -W "${candidates[*]:-}" -- "$cur")
-    }
-
-    complete -f -F _dotnet_bash_complete dotnet
-  fi
+#   if [[ $(dotnet --version 2>/dev/null | cut -d. -f1) -ge 10 ]]; then
+#     source <(dotnet completions script bash)
+#   else
+#     _dotnet_bash_complete() {
+#       local cur="${COMP_WORDS[COMP_CWORD]}" IFS=$'\n'
+#       local candidates
+#
+#       read -d '' -ra candidates < <(dotnet complete --position "${COMP_POINT}" "${COMP_LINE}" 2>/dev/null)
+#       read -d '' -ra COMPREPLY < <(compgen -W "${candidates[*]:-}" -- "$cur")
+#     }
+#
+#     complete -f -F _dotnet_bash_complete dotnet
+#   fi
 fi
 
 #-+-#-+-#-+-#-+-#
