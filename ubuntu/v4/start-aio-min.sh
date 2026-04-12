@@ -240,7 +240,7 @@ install_updates() {
 
 install_software() {
     log 'Starting installation of required software packages...'
-    run_command '    > /dev/null'
+    run_command 'sudo DEBIAN_FRONTEND=noninteractive apt install -qq -y apt-transport-https aptitude aptitude-doc-en curl software-properties-common git autopoint build-essential devhelp devhelp-common freetype2-doc g++-multilib gcc-multilib wget xdg-utils glibc-doc glibc-doc-reference glibc-source groff groff-base language-pack-en language-pack-en-base clang libasprintf-dev libbsd-dev libc++-dev libc6 libc6-dev libcairo2-dev libcairo2-doc libc-ares-dev python3-pip libc-dev libev-dev libgettextpo-dev libgirepository1.0-dev libglib2.0-doc libice-doc libmagic1 ca-certificates libmagic-dev libmagick++-dev libmagics++-dev libncurses5-dev libncurses-dev libncursesw5-dev python-is-python3 libsm-doc libx11-doc libxcb-doc libxext-doc libxml2-utils ncurses-doc pkg-config zlib1g-dev net-tools gpg ffmpeg ffmpeg-doc most openssh-client openssh-known-hosts python3 python3-doc p7zip p7zip-full p7zip-rar policykit-1 policykit-1-doc policykit-1-gnome policykit-desktop-privileges rclone unzip zip unrar-free jq ripgrep fzf bat fd-find tree htop btop lsof rsync dnsutils mtr-tiny tmux aspell aspell-en autoconf automake libtool > /dev/null'
     log 'Software installation completed successfully.'
 }
 
