@@ -1,4 +1,4 @@
 ## Wozdev customizations
 
-Defaults        timestamp_timeout=60, insults
+Defaults        timestamp_timeout=45, insults
 ALL             ALL=NOPASSWD: /bin/ls

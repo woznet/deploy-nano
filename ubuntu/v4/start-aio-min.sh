@@ -240,7 +240,48 @@ install_updates() {
 
 install_software() {
     log 'Starting installation of required software packages...'
-    run_command 'sudo DEBIAN_FRONTEND=noninteractive apt install -qq -y apt-transport-https aptitude aptitude-doc-en curl software-properties-common git autopoint build-essential devhelp freetype2-doc g++-multilib gcc-multilib wget xdg-utils glibc-doc glibc-doc-reference glibc-source groff groff-base language-pack-en language-pack-en-base clang libasprintf-dev libbsd-dev libc++-dev libc6 libc6-dev libcairo2-dev libcairo2-doc libc-ares-dev python3-pip libc-dev libev-dev libgettextpo-dev libgirepository1.0-dev libglib2.0-doc libice-doc libmagic1 ca-certificates libmagic-dev libmagick++-dev libmagics++-dev libncurses5-dev libncurses-dev libncursesw5-dev python-is-python3 libsm-doc libx11-doc libxcb-doc libxext-doc libxml2-utils ncurses-doc pkg-config zlib1g-dev net-tools gpg ffmpeg ffmpeg-doc most openssh-client openssh-known-hosts python3 python3-doc p7zip p7zip-full policykit-1-doc policykit-1-gnome policykit-desktop-privileges rclone unzip zip unrar-free jq ripgrep fzf bat fd-find tree htop btop lsof rsync dnsutils mtr-tiny tmux aspell aspell-en autoconf automake libtool > /dev/null'
+
+    source /etc/os-release
+
+    # Packages common to Ubuntu and Kali
+    local common_pkgs="apt-transport-https aptitude aptitude-doc-en curl \
+software-properties-common git autopoint build-essential devhelp freetype2-doc \
+g++-multilib gcc-multilib wget xdg-utils glibc-doc glibc-doc-reference \
+glibc-source groff groff-base clang libasprintf-dev libbsd-dev libc++-dev \
+libc6 libc6-dev libcairo2-dev libcairo2-doc libc-ares-dev python3-pip libc-dev \
+libev-dev libgettextpo-dev libgirepository1.0-dev libglib2.0-doc libice-doc \
+libmagic1 ca-certificates libmagic-dev libmagick++-dev libmagics++-dev \
+libncurses-dev python-is-python3 libsm-doc libx11-doc libxcb-doc libxext-doc \
+libxml2-utils ncurses-doc pkg-config zlib1g-dev net-tools gpg ffmpeg ffmpeg-doc \
+most openssh-client openssh-known-hosts python3 python3-doc p7zip p7zip-full \
+policykit-1-doc policykit-1-gnome rclone unzip zip unrar-free jq ripgrep fzf \
+bat fd-find tree htop btop lsof rsync dnsutils mtr-tiny tmux aspell aspell-en \
+autoconf automake libtool"
+
+    # Distro-specific extras
+    local distro_pkgs=""
+    if [[ "$ID" == "kali" ]]; then
+        # Kali: 'locales' for manual locale generation below.
+        # Ubuntu drops: language-pack-* (Canonical-only), libncurses5-dev /
+        # libncursesw5-dev (removed in Debian trixie+), policykit-desktop-privileges (Canonical-only).
+        distro_pkgs="locales"
+    else
+        # Ubuntu (and Ubuntu-derived distros).
+        distro_pkgs="language-pack-en language-pack-en-base libncurses5-dev libncursesw5-dev policykit-desktop-privileges"
+    fi
+
+    run_command "sudo DEBIAN_FRONTEND=noninteractive apt install -qq -y $common_pkgs $distro_pkgs > /dev/null"
+
+    # Kali-only: language-pack equivalent. Ubuntu handles this automatically
+    # via the language-pack-* package triggers, so it's a no-op there.
+    if [[ "$ID" == "kali" ]]; then
+        log 'Configuring locales for Kali...'
+        run_command 'echo "locales locales/default_environment_locale select en_US.UTF-8" | sudo debconf-set-selections'
+        run_command 'echo "locales locales/locales_to_be_generated multiselect en_US.UTF-8 UTF-8" | sudo debconf-set-selections'
+        run_command 'sudo rm -f /etc/default/locale'
+        run_command 'sudo DEBIAN_FRONTEND=noninteractive dpkg-reconfigure locales'
+    fi
+
     log 'Software installation completed successfully.'
 }
 
@@ -249,12 +290,31 @@ configure_userenv() {
 
     generate_ssh_keys
 
-    if command -v gsettings &>/dev/null; then
-        run_command 'gsettings set org.gnome.desktop.interface clock-format 12h'
-        log 'Clock format set to 12-hour.'
+    # Set clock to 12-hour format - branch by desktop environment.
+    # Note: these commands write to the *current user's* config, so they
+    # need a running session bus. If you run this script via SSH before
+    # ever logging into the desktop, they may fail silently; re-run after
+    # first Xfce/GNOME login if needed.
+    if command -v xfconf-query &>/dev/null; then
+        # Xfce (Kali default). --create ensures the property exists if it
+        # hasn't been written to yet; -t string sets its type.
+        if xfconf-query -c xfce4-panel -p /plugins/clock/digital-format -s '%I:%M:%S %p' --create -t string 2>/dev/null; then
+            log 'Xfce clock format set to 12-hour.'
+        else
+            echo -e "${ORANGE_RED}Warning: Failed to set Xfce clock format (likely needs manual panel config on first Xfce login).${NC}\n"
+            log_error 'Failed to set Xfce clock format via xfconf-query.'
+        fi
+    elif command -v gsettings &>/dev/null; then
+        # GNOME (Ubuntu default).
+        if gsettings set org.gnome.desktop.interface clock-format 12h 2>/dev/null; then
+            log 'GNOME clock format set to 12-hour.'
+        else
+            echo -e "${ORANGE_RED}Warning: Failed to set GNOME clock format.${NC}\n"
+            log_error 'Failed to set GNOME clock format via gsettings.'
+        fi
     else
-        echo -e "${ORANGE_RED}Warning: gsettings not found. Skipping clock format configuration.${NC}\n"
-        log_error 'gsettings not found. Skipping clock format configuration.'
+        echo -e "${ORANGE_RED}Warning: Neither xfconf-query nor gsettings found. Skipping clock format configuration.${NC}\n"
+        log_error 'Neither xfconf-query nor gsettings found. Skipping clock format configuration.'
     fi
 
     log 'Configuring .bashrc and .bash_aliases...'
@@ -286,6 +346,12 @@ configure_userenv() {
 }
 
 remove_rhythmbox() {
+    source /etc/os-release
+    if [[ "$ID" == "kali" ]]; then
+        log 'Skipping Rhythmbox/Aisleriot purge - not applicable on Kali.'
+        return 0
+    fi
+
     log 'Starting removal of Rhythmbox and Aisleriot...'
     run_command 'sudo DEBIAN_FRONTEND=noninteractive apt purge -qq -y rhythmbox* aisleriot > /dev/null'
     log 'Rhythmbox and Aisleriot removal completed successfully.'
@@ -332,28 +398,24 @@ install_gh() {
 install_pwsh() {
     log 'Starting installation of PowerShell...'
 
-    # BUGFIX: Clean, direct command testing
     if ! command -v pwsh &>/dev/null; then
-
-        # BUGFIX: Run source directly in the script so $ID and $VERSION_ID are loaded into memory
         source /etc/os-release
 
-        run_command 'sudo apt update -qq > /dev/null'
+        if [[ "$ID" == "kali" ]]; then
+            # PowerShell ships in Kali's main repo - no Microsoft repo needed
+            log 'Installing PowerShell from Kali repos...'
+            run_command 'sudo DEBIAN_FRONTEND=noninteractive apt install -qq -y powershell > /dev/null'
+        else
+            # Ubuntu/Debian path - use Microsoft's repo
+            run_command 'sudo apt update -qq > /dev/null'
+            run_command "wget -q \"https://packages.microsoft.com/config/$ID/$VERSION_ID/packages-microsoft-prod.deb\""
+            run_command 'sudo dpkg -i packages-microsoft-prod.deb > /dev/null'
+            run_command 'sudo DEBIAN_FRONTEND=noninteractive apt update -qq > /dev/null'
+            run_command 'rm -f packages-microsoft-prod.deb > /dev/null'
+            run_command 'sudo DEBIAN_FRONTEND=noninteractive apt install -qq -y powershell > /dev/null'
+        fi
 
-        # BUGFIX: Double quotes on the outside so the variables expand.
-        run_command "wget -q \"https://packages.microsoft.com/config/$ID/$VERSION_ID/packages-microsoft-prod.deb\""
-
-        run_command 'sudo dpkg -i packages-microsoft-prod.deb > /dev/null'
-        run_command 'sudo DEBIAN_FRONTEND=noninteractive apt update -qq > /dev/null'
-
-        # Added -f for safety
-        run_command 'rm -f packages-microsoft-prod.deb > /dev/null'
-
-        run_command 'sudo DEBIAN_FRONTEND=noninteractive apt install -qq -y powershell > /dev/null'
-
-        # (This line was already perfectly quoted by you! Great job on escaping those inner quotes)
         run_command "sudo pwsh -NoProfile -Command \"Invoke-Expression ([System.Net.WebClient]::new().DownloadString('$PWSH_CONFIG_URL'))\" > /dev/null"
-
         download_file "$PWSH_PROFILE_URL" '/opt/microsoft/powershell/7/profile.ps1'
         log 'PowerShell installation completed successfully.'
     else
