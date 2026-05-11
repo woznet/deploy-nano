@@ -405,6 +405,68 @@ import_github_ssh_keys() {
     fi
 }
 
+configure_sshd() {
+    log 'Configuring SSH server for pubkey-only authentication...'
+
+    # Install openssh-server if not present (Kali ships it but the service is
+    # disabled by default; some minimal installs may not have the package at all)
+    if ! dpkg -s openssh-server &>/dev/null; then
+        log 'Installing openssh-server...'
+        run_command 'sudo DEBIAN_FRONTEND=noninteractive apt install -qq -y openssh-server > /dev/null'
+    fi
+
+    # SAFETY: refuse to disable password auth if no authorized_keys exists.
+    # This is the difference between a hardened box and a locked-out box.
+    if [[ ! -s "$HOME/.ssh/authorized_keys" ]]; then
+        echo -e "${ORANGE_RED}Refusing to disable password auth: $HOME/.ssh/authorized_keys is missing or empty.${NC}\n"
+        log_error 'Skipping SSH hardening: no authorized_keys present.'
+        return 1
+    fi
+
+    # Drop-in config rather than editing /etc/ssh/sshd_config directly.
+    # Modern OpenSSH on Debian/Kali Includes /etc/ssh/sshd_config.d/*.conf,
+    # so this survives package upgrades cleanly and is easy to revert.
+    local sshd_drop_in='/etc/ssh/sshd_config.d/99-pubkey-only.conf'
+    log "Writing SSH hardening drop-in to $sshd_drop_in..."
+
+    sudo tee "$sshd_drop_in" > /dev/null <<'EOF'
+# Pubkey-only SSH authentication
+# Managed by deploy script - edits will be overwritten on re-run
+
+PasswordAuthentication no
+PubkeyAuthentication yes
+ChallengeResponseAuthentication no
+KbdInteractiveAuthentication no
+PermitEmptyPasswords no
+
+# Default for PermitRootLogin is 'prohibit-password' which already blocks
+# password root logins. Uncomment to disable key-based root login too:
+# PermitRootLogin no
+EOF
+
+    sudo chmod 644 "$sshd_drop_in"
+
+    # Validate config before touching the running service
+    if ! sudo sshd -t; then
+        echo -e "${ORANGE_RED}Error: sshd config test failed. Not restarting service.${NC}\n"
+        log_error 'sshd -t failed; refusing to restart ssh service.'
+        return 1
+    fi
+
+    # Verify the drop-in actually took effect (catches the rare case where
+    # the Include directive is missing from the main sshd_config)
+    if ! sudo sshd -T | grep -qx 'passwordauthentication no'; then
+        echo -e "${ORANGE_RED}Warning: effective sshd config still allows password auth. Drop-in may not be loading - check 'Include /etc/ssh/sshd_config.d/*.conf' in /etc/ssh/sshd_config.${NC}\n"
+        log_error 'Effective sshd config did not apply pubkey-only settings.'
+        return 1
+    fi
+
+    run_command 'sudo systemctl enable ssh'
+    run_command 'sudo systemctl restart ssh'
+
+    log 'SSH server configured for pubkey-only auth.'
+}
+
 install_gh() {
     log 'Starting installation of GitHub CLI...'
 
@@ -762,6 +824,7 @@ log 'Starting non-critical function execution.'
 run_non_critical 'remove_rhythmbox'
 # run_non_critical 'generate_ssh_keys'
 run_non_critical 'import_github_ssh_keys'
+run_non_critical 'configure_sshd'
 run_non_critical 'install_gh'
 run_non_critical 'install_pwsh'
 run_non_critical 'install_1password'
