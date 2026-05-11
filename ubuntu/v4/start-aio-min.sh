@@ -6,14 +6,14 @@ ORANGE_RED='\033[38;2;255;69;0m'
 NC='\033[0m'
 
 # Configuration variables shared across all scripts
-PWSH_PROFILE_URL='https://raw.githubusercontent.com/Woznet/deploy-nano/main/ubuntu/config/profile.ps1'
-PWSH_CONFIG_URL='https://raw.githubusercontent.com/Woznet/deploy-nano/main/ubuntu/config/Invoke-ConfigPwsh.ps1'
-BASHRC_URL='https://raw.githubusercontent.com/Woznet/deploy-nano/main/ubuntu/config/.bashrc'
-BASH_ALIASES_URL='https://raw.githubusercontent.com/Woznet/deploy-nano/main/ubuntu/config/.bash_aliases'
-SUDOERS_URL='https://raw.githubusercontent.com/Woznet/deploy-nano/main/ubuntu/config/sudoers.woz'
-INPUTRC_URL='https://raw.githubusercontent.com/Woznet/deploy-nano/main/ubuntu/config/inputrc'
-NANORC_URL='https://raw.githubusercontent.com/Woznet/deploy-nano/main/ubuntu/config/nanorc'
-# DISABLE_IPV6_URL='https://raw.githubusercontent.com/Woznet/deploy-nano/main/ubuntu/config/20-disable-ipv6.conf'
+PWSH_PROFILE_URL='https://raw.githubusercontent.com/woznet/deploy-nano/main/ubuntu/config/profile.ps1'
+PWSH_CONFIG_URL='https://raw.githubusercontent.com/woznet/deploy-nano/main/ubuntu/config/Invoke-ConfigPwsh.ps1'
+BASHRC_URL='https://raw.githubusercontent.com/woznet/deploy-nano/main/ubuntu/config/.bashrc'
+BASH_ALIASES_URL='https://raw.githubusercontent.com/woznet/deploy-nano/main/ubuntu/config/.bash_aliases'
+SUDOERS_URL='https://raw.githubusercontent.com/woznet/deploy-nano/main/ubuntu/config/sudoers.woz'
+INPUTRC_URL='https://raw.githubusercontent.com/woznet/deploy-nano/main/ubuntu/config/inputrc'
+NANORC_URL='https://raw.githubusercontent.com/woznet/deploy-nano/main/ubuntu/config/nanorc'
+# DISABLE_IPV6_URL='https://raw.githubusercontent.com/woznet/deploy-nano/main/ubuntu/config/20-disable-ipv6.conf'
 
 NANO_SYNTAX_TEMP_PATH='/tmp/nanosyntaxpath.tmp'
 NANO_BUILD_TEMP_PATH='/tmp/nanobuildpath.tmp'
@@ -256,7 +256,7 @@ libxml2-utils ncurses-doc pkg-config zlib1g-dev net-tools gpg ffmpeg ffmpeg-doc 
 most openssh-client openssh-known-hosts python3 python3-doc p7zip p7zip-full \
 policykit-1-doc policykit-1-gnome rclone unzip zip unrar-free jq ripgrep fzf \
 bat fd-find tree htop btop lsof rsync dnsutils mtr-tiny tmux aspell aspell-en \
-autoconf automake libtool"
+autoconf automake libtool ssh-import-id"
 
     # Distro-specific extras
     local distro_pkgs=""
@@ -374,6 +374,37 @@ generate_ssh_keys() {
     fi
 }
 
+import_github_ssh_keys() {
+    local gh_user="${GITHUB_SSH_USER:-woznet}"
+    log "Importing SSH keys from GitHub user: $gh_user"
+
+    mkdir -p "$HOME/.ssh"
+    chmod 700 "$HOME/.ssh"
+
+    if command -v ssh-import-id &>/dev/null; then
+        run_command "ssh-import-id gh:$gh_user"
+    else
+        # Fallback: direct fetch, with dedup against existing keys
+        local tmp_keys
+        tmp_keys=$(mktemp)
+        if curl -fsSL "https://github.com/$gh_user.keys" -o "$tmp_keys"; then
+            touch "$HOME/.ssh/authorized_keys"
+            # Append only keys not already present
+            while IFS= read -r key; do
+                [[ -z "$key" ]] && continue
+                grep -qxF "$key" "$HOME/.ssh/authorized_keys" || echo "$key" >> "$HOME/.ssh/authorized_keys"
+            done < "$tmp_keys"
+            rm -f "$tmp_keys"
+            chmod 600 "$HOME/.ssh/authorized_keys"
+            log "GitHub SSH keys imported successfully."
+        else
+            log_error "Failed to fetch GitHub keys for $gh_user"
+            rm -f "$tmp_keys"
+            return 1
+        fi
+    fi
+}
+
 install_gh() {
     log 'Starting installation of GitHub CLI...'
 
@@ -398,30 +429,63 @@ install_gh() {
 install_pwsh() {
     log 'Starting installation of PowerShell...'
 
-    if ! command -v pwsh &>/dev/null; then
-        source /etc/os-release
+    # If pwsh is installed, only proceed when GitHub has a newer stable release
+    if command -v pwsh &>/dev/null; then
+        local installed_version latest_version
+        installed_version=$(pwsh --version 2>/dev/null | awk '{print $NF}')
+        log "Installed PowerShell version: $installed_version"
 
-        if [[ "$ID" == "kali" ]]; then
-            # PowerShell ships in Kali's main repo - no Microsoft repo needed
-            log 'Installing PowerShell from Kali repos...'
-            run_command 'sudo DEBIAN_FRONTEND=noninteractive apt install -qq -y powershell > /dev/null'
-        else
-            # Ubuntu/Debian path - use Microsoft's repo
-            run_command 'sudo apt update -qq > /dev/null'
-            run_command "wget -q \"https://packages.microsoft.com/config/$ID/$VERSION_ID/packages-microsoft-prod.deb\""
-            run_command 'sudo dpkg -i packages-microsoft-prod.deb > /dev/null'
-            run_command 'sudo DEBIAN_FRONTEND=noninteractive apt update -qq > /dev/null'
-            run_command 'rm -f packages-microsoft-prod.deb > /dev/null'
-            run_command 'sudo DEBIAN_FRONTEND=noninteractive apt install -qq -y powershell > /dev/null'
+        # Fetch latest stable release tag from GitHub (strips the leading 'v').
+        # /releases/latest excludes prereleases and drafts, so this is always a stable build.
+        latest_version=$(curl -fsSL https://api.github.com/repos/PowerShell/PowerShell/releases/latest 2>/dev/null \
+            | jq -r '.tag_name' \
+            | sed 's/^v//')
+
+        if [[ -z "$latest_version" || "$latest_version" == "null" ]]; then
+            echo -e "${ORANGE_RED}Warning: Could not determine latest PowerShell version from GitHub. Skipping update check.${NC}\n"
+            log_error 'Could not determine latest PowerShell version. Skipping update check.'
+            return 0
         fi
 
-        run_command "sudo pwsh -NoProfile -Command \"Invoke-Expression ([System.Net.WebClient]::new().DownloadString('$PWSH_CONFIG_URL'))\" > /dev/null"
-        download_file "$PWSH_PROFILE_URL" '/opt/microsoft/powershell/7/profile.ps1'
-        log 'PowerShell installation completed successfully.'
+        log "Latest PowerShell version available: $latest_version"
+
+        if [[ "$installed_version" == "$latest_version" ]]; then
+            log 'PowerShell is up-to-date. Skipping installation.'
+            return 0
+        fi
+
+        # If installed_version does NOT sort first in -V order, it's >= latest, so skip.
+        # This handles the case where installed is a newer preview/dev build.
+        if [[ "$(printf '%s\n%s' "$installed_version" "$latest_version" | sort -V | head -n1)" != "$installed_version" ]]; then
+            log "Installed PowerShell ($installed_version) is newer than latest stable ($latest_version). Skipping installation."
+            return 0
+        fi
+
+        log "PowerShell upgrade available: $installed_version -> $latest_version. Proceeding with install."
     else
-        echo -e "${ORANGE_RED}Warning: PowerShell is already installed. Skipping installation.${NC}\n"
-        log 'PowerShell is already installed.'
+        log 'PowerShell not installed. Proceeding with fresh installation.'
     fi
+
+    # Install or upgrade
+    source /etc/os-release
+
+    if [[ "$ID" == "kali" ]]; then
+        # PowerShell ships in Kali's main repo - no Microsoft repo needed
+        log 'Installing PowerShell from Kali repos...'
+        run_command 'sudo DEBIAN_FRONTEND=noninteractive apt install -qq -y powershell > /dev/null'
+    else
+        # Ubuntu/Debian path - use Microsoft's repo
+        run_command 'sudo apt update -qq > /dev/null'
+        run_command "wget -q \"https://packages.microsoft.com/config/$ID/$VERSION_ID/packages-microsoft-prod.deb\""
+        run_command 'sudo dpkg -i packages-microsoft-prod.deb > /dev/null'
+        run_command 'sudo DEBIAN_FRONTEND=noninteractive apt update -qq > /dev/null'
+        run_command 'rm -f packages-microsoft-prod.deb > /dev/null'
+        run_command 'sudo DEBIAN_FRONTEND=noninteractive apt install -qq -y powershell > /dev/null'
+    fi
+
+    run_command "sudo pwsh -NoProfile -Command \"Invoke-Expression ([System.Net.WebClient]::new().DownloadString('$PWSH_CONFIG_URL'))\" > /dev/null"
+    download_file "$PWSH_PROFILE_URL" '/opt/microsoft/powershell/7/profile.ps1'
+    log 'PowerShell installation completed successfully.'
 }
 
 install_1password() {
@@ -632,7 +696,7 @@ download_standalone_scripts_api() {
     local target_dir="$HOME/dev/scripts"
 
     # The GitHub REST API endpoint for your specific repository folder
-    local api_url="https://api.github.com/repos/Woznet/deploy-nano/contents/ubuntu/config/install"
+    local api_url="https://api.github.com/repos/woznet/deploy-nano/contents/ubuntu/config/install"
 
     mkdir -p "$target_dir"
 
@@ -696,7 +760,8 @@ NANO_SOURCE_URL="https://nano-editor.org/dist/v${NANO_LATEST_MAJOR_VERSION}/nano
 
 log 'Starting non-critical function execution.'
 run_non_critical 'remove_rhythmbox'
-run_non_critical 'generate_ssh_keys'
+# run_non_critical 'generate_ssh_keys'
+run_non_critical 'import_github_ssh_keys'
 run_non_critical 'install_gh'
 run_non_critical 'install_pwsh'
 run_non_critical 'install_1password'
