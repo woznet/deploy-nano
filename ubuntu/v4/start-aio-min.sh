@@ -254,9 +254,9 @@ libmagic1 ca-certificates libmagic-dev libmagick++-dev libmagics++-dev \
 libncurses-dev python-is-python3 libsm-doc libx11-doc libxcb-doc libxext-doc \
 libxml2-utils ncurses-doc pkg-config zlib1g-dev net-tools gpg ffmpeg ffmpeg-doc \
 most openssh-client openssh-known-hosts python3 python3-doc p7zip p7zip-full \
-policykit-1-doc policykit-1-gnome rclone unzip zip unrar-free jq ripgrep fzf \
+policykit-1-doc rclone unzip zip unrar-free jq ripgrep fzf \
 bat fd-find tree htop btop lsof rsync dnsutils mtr-tiny tmux aspell aspell-en \
-autoconf automake libtool ssh-import-id"
+autoconf automake libtool ssh-import-id xorg xrdp xorgxrdp"
 
     # Distro-specific extras
     local distro_pkgs=""
@@ -267,7 +267,7 @@ autoconf automake libtool ssh-import-id"
         distro_pkgs="locales"
     else
         # Ubuntu (and Ubuntu-derived distros).
-        distro_pkgs="language-pack-en language-pack-en-base libncurses5-dev libncursesw5-dev policykit-desktop-privileges"
+        distro_pkgs="language-pack-en language-pack-en-base libncurses5-dev libncursesw5-dev policykit-desktop-privileges policykit-1-gnome"
     fi
 
     run_command "sudo DEBIAN_FRONTEND=noninteractive apt install -qq -y $common_pkgs $distro_pkgs > /dev/null"
