@@ -20,6 +20,7 @@ main() {
 
     log "Installing Node.js..."
     sudo DEBIAN_FRONTEND=noninteractive apt-get install -qq -y nodejs
+    hash -r
 
     log "Configuring npm global prefix at ~/.npm-global..."
     mkdir -p "$HOME/.npm-global"
