@@ -18,7 +18,8 @@ main() {
 
     log "Downloading Google Chrome .deb package..."
     local chrome_url="https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb"
-    local temp_deb="/tmp/google-chrome-stable_current_amd64.deb"
+    local temp_deb
+    temp_deb=$(mktemp --suffix=.deb)
     trap 'rm -f "$temp_deb"' EXIT
     curl -fsSL "$chrome_url" -o "$temp_deb"
 
