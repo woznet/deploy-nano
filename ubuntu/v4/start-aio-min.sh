@@ -499,9 +499,9 @@ install_pwsh() {
 
         # Fetch latest stable release tag from GitHub (strips the leading 'v').
         # /releases/latest excludes prereleases and drafts, so this is always a stable build.
-        latest_version=$(curl -fsSL https://api.github.com/repos/PowerShell/PowerShell/releases/latest 2>/dev/null \
-            | jq -r '.tag_name' \
-            | sed 's/^v//')
+        latest_version=$(curl -fsSL https://api.github.com/repos/PowerShell/PowerShell/releases/latest 2>/dev/null |
+            jq -r '.tag_name' |
+            sed 's/^v//')
 
         if [[ -z "$latest_version" || "$latest_version" == "null" ]]; then
             echo -e "${ORANGE_RED}Warning: Could not determine latest PowerShell version from GitHub. Skipping update check.${NC}\n"
@@ -530,24 +530,114 @@ install_pwsh() {
 
     # Install or upgrade
     source /etc/os-release
+    local install_ok=0
 
     if [[ "$ID" == "kali" ]]; then
         # PowerShell ships in Kali's main repo - no Microsoft repo needed
         log 'Installing PowerShell from Kali repos...'
-        run_command 'sudo DEBIAN_FRONTEND=noninteractive apt install -qq -y powershell > /dev/null'
+        if sudo DEBIAN_FRONTEND=noninteractive apt install -qq -y powershell >/dev/null; then
+            install_ok=1
+        else
+            log 'Kali repo install failed.'
+        fi
     else
-        # Ubuntu/Debian path - use Microsoft's repo
-        run_command 'sudo apt update -qq > /dev/null'
-        run_command "wget -q \"https://packages.microsoft.com/config/$ID/$VERSION_ID/packages-microsoft-prod.deb\""
-        run_command 'sudo dpkg -i packages-microsoft-prod.deb > /dev/null'
-        run_command 'sudo DEBIAN_FRONTEND=noninteractive apt update -qq > /dev/null'
-        run_command 'rm -f packages-microsoft-prod.deb > /dev/null'
-        run_command 'sudo DEBIAN_FRONTEND=noninteractive apt install -qq -y powershell > /dev/null'
+        # Ubuntu/Debian path - use Microsoft's repo if they publish for this release
+        local ms_repo_url="https://packages.microsoft.com/config/$ID/$VERSION_ID/packages-microsoft-prod.deb"
+        if curl -fsSLI -o /dev/null "$ms_repo_url" 2>/dev/null; then
+            log "Installing PowerShell from Microsoft repo ($ID $VERSION_ID)..."
+            if install_pwsh_microsoft_repo "$ms_repo_url"; then
+                install_ok=1
+            else
+                log 'Microsoft repo install failed.'
+            fi
+        else
+            log "Microsoft does not publish a config package for $ID $VERSION_ID."
+        fi
+    fi
+
+    # Fallback: download the .deb directly from the PowerShell GitHub releases.
+    if [[ $install_ok -eq 0 ]]; then
+        log 'Falling back to PowerShell .deb from GitHub releases...'
+        if ! install_pwsh_from_github_deb; then
+            echo -e "${ORANGE_RED}Error: PowerShell installation failed via all methods.${NC}\n"
+            log_error 'All PowerShell install methods failed.'
+            return 1
+        fi
     fi
 
     run_command "sudo pwsh -NoProfile -Command \"Invoke-Expression ([System.Net.WebClient]::new().DownloadString('$PWSH_CONFIG_URL'))\" > /dev/null"
     download_file "$PWSH_PROFILE_URL" '/opt/microsoft/powershell/7/profile.ps1'
     log 'PowerShell installation completed successfully.'
+}
+
+install_pwsh_microsoft_repo() {
+    local ms_repo_url="$1"
+    local deb_file='packages-microsoft-prod.deb'
+
+    sudo apt update -qq >/dev/null || return 1
+    wget -q -O "$deb_file" "$ms_repo_url" || {
+        rm -f "$deb_file"
+        return 1
+    }
+    sudo dpkg -i "$deb_file" >/dev/null || {
+        rm -f "$deb_file"
+        return 1
+    }
+    sudo DEBIAN_FRONTEND=noninteractive apt update -qq >/dev/null || {
+        rm -f "$deb_file"
+        return 1
+    }
+    rm -f "$deb_file"
+    sudo DEBIAN_FRONTEND=noninteractive apt install -qq -y powershell >/dev/null || return 1
+    return 0
+}
+
+install_pwsh_from_github_deb() {
+    local arch tag deb_url release_json deb_file
+    arch=$(dpkg --print-architecture)
+
+    release_json=$(curl -fsSL https://api.github.com/repos/PowerShell/PowerShell/releases/latest 2>/dev/null)
+    if [[ -z "$release_json" ]]; then
+        log_error 'Could not fetch PowerShell release metadata from GitHub.'
+        return 1
+    fi
+
+    tag=$(echo "$release_json" | jq -r '.tag_name')
+
+    # PowerShell publishes assets named like: powershell_7.4.6-1.deb_amd64.deb
+    # startswith("powershell_") cleanly excludes powershell-lts_/powershell-preview_ variants.
+    deb_url=$(echo "$release_json" |
+        jq -r --arg arch "$arch" \
+            '.assets[]
+             | select(.name | startswith("powershell_"))
+             | select(.name | endswith("_" + $arch + ".deb"))
+             | .browser_download_url' |
+        head -n1)
+
+    if [[ -z "$deb_url" || "$deb_url" == "null" ]]; then
+        log_error "No PowerShell .deb asset found for architecture '$arch' in release '$tag'."
+        return 1
+    fi
+
+    deb_file="/tmp/$(basename "$deb_url")"
+
+    log "Downloading $deb_url"
+    if ! wget -q -O "$deb_file" "$deb_url"; then
+        log_error "Failed to download PowerShell .deb from $deb_url"
+        rm -f "$deb_file"
+        return 1
+    fi
+
+    # apt install resolves runtime deps (libicu, libssl, etc); dpkg -i alone would not.
+    if ! sudo DEBIAN_FRONTEND=noninteractive apt install -qq -y "$deb_file" >/dev/null; then
+        log_error "Failed to install PowerShell from $deb_file"
+        rm -f "$deb_file"
+        return 1
+    fi
+
+    rm -f "$deb_file"
+    log "Installed PowerShell from GitHub .deb ($tag)."
+    return 0
 }
 
 install_1password() {
