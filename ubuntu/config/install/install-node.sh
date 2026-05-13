@@ -26,10 +26,10 @@ main() {
     mkdir -p "$HOME/.npm-global"
     npm config set prefix "$HOME/.npm-global"
 
-    if ! grep -qF 'export PATH=~/.npm-global/bin:$PATH' "$HOME/.bashrc"; then
+    if ! grep -q ".npm-global/bin" "$HOME/.bashrc"; then
         log "Adding ~/.npm-global/bin to PATH in ~/.bashrc..."
         echo '' >>"$HOME/.bashrc"
-        echo 'export PATH=~/.npm-global/bin:$PATH' >>"$HOME/.bashrc"
+        echo 'export PATH="$HOME/.npm-global/bin:$PATH"' >>"$HOME/.bashrc"
     else
         log "~/.npm-global/bin PATH entry already present in ~/.bashrc. Skipping."
     fi
