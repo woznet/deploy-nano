@@ -19,12 +19,11 @@ main() {
     log "Downloading Google Chrome .deb package..."
     local chrome_url="https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb"
     local temp_deb="/tmp/google-chrome-stable_current_amd64.deb"
+    trap 'rm -f "$temp_deb"' EXIT
     curl -fsSL "$chrome_url" -o "$temp_deb"
 
     log "Installing Google Chrome (pulling missing dependencies)..."
     sudo DEBIAN_FRONTEND=noninteractive apt-get install -qq -y "$temp_deb"
-
-    rm -f "$temp_deb"
 
     log "Google Chrome installed successfully."
 }
