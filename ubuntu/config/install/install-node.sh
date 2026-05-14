@@ -31,7 +31,7 @@ main() {
         echo '' >>"$HOME/.bashrc"
         echo 'export PATH="$HOME/.npm-global/bin:$PATH"' >>"$HOME/.bashrc"
     else
-        log "~/.npm-global/bin PATH entry already present in ~/.bashrc. Skipping."
+        log "$HOME/.npm-global/bin PATH entry already present in $HOME/.bashrc. Skipping."
     fi
 
     export PATH="$HOME/.npm-global/bin:$PATH"
