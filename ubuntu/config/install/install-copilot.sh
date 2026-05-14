@@ -21,6 +21,10 @@ main() {
     log "Installing @github/copilot globally via npm..."
     npm install -g @github/copilot
 
+    NPM_BIN="$(npm prefix -g)/bin"
+    if [[ ! ":$PATH:" == *":$NPM_BIN:"* ]]; then
+        export PATH="$NPM_BIN:$PATH"
+    fi
     log "GitHub Copilot CLI $(copilot --version 2>/dev/null | head -n1) installed successfully."
 }
 
