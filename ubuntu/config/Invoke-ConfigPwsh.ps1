@@ -5,7 +5,7 @@ try {
     if (-not (Get-Module Microsoft.PowerShell.PSResourceGet -ErrorAction SilentlyContinue)) {
         Import-Module Microsoft.PowerShell.PSResourceGet
     }
-    Set-PSResourceRepository -Name PSGallery -Trusted
+    Register-PSResourceRepository -PSGallery -Trusted -Force
     Install-PSResource -Name PSReadLine, Az.Accounts, Az.Tools.Predictor, Microsoft.PowerShell.PSResourceGet, WozTools -Reinstall -Scope AllUsers -PassThru
     Update-Help -UICulture ([cultureinfo]::CurrentUICulture) -Module * -Force -ErrorAction Ignore
 }
