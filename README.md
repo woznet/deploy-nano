@@ -10,7 +10,7 @@
 ### V4 - Run start-aio-min.sh - [start-aio-min.sh][11]
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/Woznet/deploy-nano/main/ubuntu/v4/start-aio-min.sh | bash
+curl -fsSL https://raw.githubusercontent.com/woznet/deploy-nano/main/ubuntu/v4/start-aio-min.sh | bash
 ```
 
 ---
@@ -23,7 +23,7 @@ curl -fsSL https://raw.githubusercontent.com/Woznet/deploy-nano/main/ubuntu/v4/s
 ### Run for Windows - [deploy.ps1][9]
 
 ```powershell
-Invoke-Expression ([System.Net.WebClient]::new().DownloadString('https://raw.githubusercontent.com/Woznet/deploy-nano/main/windows/deploy.ps1'))
+Invoke-Expression ([System.Net.WebClient]::new().DownloadString('https://raw.githubusercontent.com/woznet/deploy-nano/main/windows/deploy.ps1'))
 ```
 
 ---
@@ -48,5 +48,5 @@ Invoke-Expression ([System.Net.WebClient]::new().DownloadString('https://raw.git
 [6]: https://learn.microsoft.com/en-us/powershell/scripting/install/install-ubuntu
 [7]: https://github.com/cli/cli/blob/trunk/docs/install_linux.md#debian-ubuntu-linux-raspberry-pi-os-apt
 [8]: https://github.com/nvm-sh/nvm
-[9]: https://github.com/Woznet/deploy-nano/blob/main/windows/deploy.ps1
-[11]: https://github.com/Woznet/deploy-nano/blob/main/ubuntu/v4/start-aio-min.sh
+[9]: https://github.com/woznet/deploy-nano/blob/main/windows/deploy.ps1
+[11]: https://github.com/woznet/deploy-nano/blob/main/ubuntu/v4/start-aio-min.sh
