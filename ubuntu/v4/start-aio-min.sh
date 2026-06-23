@@ -228,13 +228,13 @@ set_timezone() {
 
 check_updates() {
     log 'Starting software update...'
-    run_command 'sudo DEBIAN_FRONTEND=noninteractive apt update -qq > /dev/null'
+    run_command 'sudo DEBIAN_FRONTEND=noninteractive apt-get update -qq > /dev/null'
     log 'Software update completed successfully.'
 }
 
 install_updates() {
     log 'Starting full upgrade...'
-    run_command 'sudo DEBIAN_FRONTEND=noninteractive apt full-upgrade -qq -y > /dev/null'
+    run_command 'sudo DEBIAN_FRONTEND=noninteractive apt-get full-upgrade -qq -y > /dev/null'
     log 'Full upgrade completed successfully.'
 }
 
@@ -270,7 +270,7 @@ autoconf automake libtool ssh-import-id xorg xrdp xorgxrdp"
         distro_pkgs="language-pack-en language-pack-en-base libncurses5-dev libncursesw5-dev policykit-desktop-privileges policykit-1-gnome"
     fi
 
-    run_command "sudo DEBIAN_FRONTEND=noninteractive apt install -qq -y $common_pkgs $distro_pkgs > /dev/null"
+    run_command "sudo DEBIAN_FRONTEND=noninteractive apt-get install -qq -y $common_pkgs $distro_pkgs > /dev/null"
 
     # Kali-only: language-pack equivalent. Ubuntu handles this automatically
     # via the language-pack-* package triggers, so it's a no-op there.
@@ -353,7 +353,7 @@ remove_rhythmbox() {
     fi
 
     log 'Starting removal of Rhythmbox and Aisleriot...'
-    run_command 'sudo DEBIAN_FRONTEND=noninteractive apt purge -qq -y rhythmbox* aisleriot > /dev/null'
+    run_command 'sudo DEBIAN_FRONTEND=noninteractive apt-get purge -qq -y rhythmbox* aisleriot > /dev/null'
     log 'Rhythmbox and Aisleriot removal completed successfully.'
 }
 
@@ -412,7 +412,7 @@ configure_sshd() {
     # disabled by default; some minimal installs may not have the package at all)
     if ! dpkg -s openssh-server &>/dev/null; then
         log 'Installing openssh-server...'
-        run_command 'sudo DEBIAN_FRONTEND=noninteractive apt install -qq -y openssh-server > /dev/null'
+        run_command 'sudo DEBIAN_FRONTEND=noninteractive apt-get install -qq -y openssh-server > /dev/null'
     fi
 
     # SAFETY: refuse to disable password auth if no authorized_keys exists.
@@ -478,8 +478,8 @@ install_gh() {
         # BUGFIX: Outer double quotes so $(dpkg ...) expands. Escaped inner double quotes. Added >/dev/null for silence.
         run_command "echo \"deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main\" | sudo tee /etc/apt/sources.list.d/github-cli.list >/dev/null"
 
-        run_command 'sudo DEBIAN_FRONTEND=noninteractive apt update -qq > /dev/null'
-        run_command 'sudo DEBIAN_FRONTEND=noninteractive apt install -qq -y gh > /dev/null'
+        run_command 'sudo DEBIAN_FRONTEND=noninteractive apt-get update -qq > /dev/null'
+        run_command 'sudo DEBIAN_FRONTEND=noninteractive apt-get install -qq -y gh > /dev/null'
 
         log 'GitHub CLI installation completed successfully.'
     else
@@ -535,7 +535,7 @@ install_pwsh() {
     if [[ "$ID" == "kali" ]]; then
         # PowerShell ships in Kali's main repo - no Microsoft repo needed
         log 'Installing PowerShell from Kali repos...'
-        if sudo DEBIAN_FRONTEND=noninteractive apt install -qq -y powershell >/dev/null; then
+        if sudo DEBIAN_FRONTEND=noninteractive apt-get install -qq -y powershell >/dev/null; then
             install_ok=1
         else
             log 'Kali repo install failed.'
@@ -574,7 +574,7 @@ install_pwsh_microsoft_repo() {
     local ms_repo_url="$1"
     local deb_file='packages-microsoft-prod.deb'
 
-    sudo apt update -qq >/dev/null || return 1
+    sudo apt-get update -qq >/dev/null || return 1
     wget -q -O "$deb_file" "$ms_repo_url" || {
         rm -f "$deb_file"
         return 1
@@ -583,12 +583,12 @@ install_pwsh_microsoft_repo() {
         rm -f "$deb_file"
         return 1
     }
-    sudo DEBIAN_FRONTEND=noninteractive apt update -qq >/dev/null || {
+    sudo DEBIAN_FRONTEND=noninteractive apt-get update -qq >/dev/null || {
         rm -f "$deb_file"
         return 1
     }
     rm -f "$deb_file"
-    sudo DEBIAN_FRONTEND=noninteractive apt install -qq -y powershell >/dev/null || return 1
+    sudo DEBIAN_FRONTEND=noninteractive apt-get install -qq -y powershell >/dev/null || return 1
     return 0
 }
 
@@ -629,7 +629,7 @@ install_pwsh_from_github_deb() {
     fi
 
     # apt install resolves runtime deps (libicu, libssl, etc); dpkg -i alone would not.
-    if ! sudo DEBIAN_FRONTEND=noninteractive apt install -qq -y "$deb_file" >/dev/null; then
+    if ! sudo DEBIAN_FRONTEND=noninteractive apt-get install -qq -y "$deb_file" >/dev/null; then
         log_error "Failed to install PowerShell from $deb_file"
         rm -f "$deb_file"
         return 1
@@ -688,7 +688,7 @@ remove_nano() {
     log 'Checking if nano is installed...'
     if [[ $(command -v nano) ]]; then
         log 'Nano is installed. Removing nano...'
-        run_command 'sudo DEBIAN_FRONTEND=noninteractive apt purge -qq -y nano > /dev/null'
+        run_command 'sudo DEBIAN_FRONTEND=noninteractive apt-get purge -qq -y nano > /dev/null'
         log 'Nano removed successfully.'
     else
         echo -e "${ORANGE_RED}Warning: Nano is not installed. Skipping removal.${NC}\n"
