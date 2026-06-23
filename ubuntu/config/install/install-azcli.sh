@@ -11,8 +11,8 @@ log() {
 }
 
 if ! command -v az >/dev/null 2>&1; then
-    sudo apt update -qq
-    sudo apt install -qq -y apt-transport-https ca-certificates curl gnupg lsb-release
+    sudo apt-get update -qq
+    sudo apt-get install -qq -y apt-transport-https ca-certificates curl gnupg lsb-release
 
     sudo mkdir -p /etc/apt/keyrings
     curl -sLS https://packages.microsoft.com/keys/microsoft.asc |
@@ -27,8 +27,8 @@ Components: main
 Architectures: $(dpkg --print-architecture)
 Signed-by: /etc/apt/keyrings/microsoft.gpg" | sudo tee /etc/apt/sources.list.d/azure-cli.sources
 
-    sudo apt update -qq
-    sudo apt install -qq -y azure-cli
+    sudo apt-get update -qq
+    sudo apt-get install -qq -y azure-cli
 
 else
     log "Azure CLI already installed. Skipping."
