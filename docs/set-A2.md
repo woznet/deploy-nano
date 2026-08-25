@@ -1,9 +1,6 @@
 # Checklist Set A2
 
-> **AGENT PRE-FLIGHT DIRECTIVE:** 
-> 1. Inspect all target files to verify each checklist item is still unresolved before modifying code.
-> 2. Skip items already implemented in the current working tree.
-> 3. Only execute changes for actively reproduced or verified gaps.
+> This document records progress on checklist Set A1.
 
 ## Checklist
 
