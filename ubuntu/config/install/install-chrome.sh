@@ -10,6 +10,19 @@ log() {
     echo -e "${BLUE}[$(date +'%T')]${NC} ${GREEN}$1${NC}"
 }
 
+# Script scope, not local to main(): the EXIT trap fires after main() has
+# returned, and a local would be out of scope and expand to the empty string.
+temp_deb=''
+
+cleanup() {
+    local status=$?
+    if [ -n "$temp_deb" ]; then
+        rm -f "$temp_deb" || true
+    fi
+    return "$status"
+}
+trap cleanup EXIT
+
 main() {
     log "Starting Google Chrome installation..."
 
@@ -19,9 +32,8 @@ main() {
 
     log "Downloading Google Chrome .deb package..."
     local chrome_url="https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb"
-    local temp_deb
+    # Download to a private temp path; cleanup() removes it on every exit path
     temp_deb=$(mktemp --suffix=.deb)
-    trap 'rm -f "$temp_deb"' EXIT
     curl -fsSL "$chrome_url" -o "$temp_deb"
 
     log "Installing Google Chrome (pulling missing dependencies)..."
