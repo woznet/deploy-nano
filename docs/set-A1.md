@@ -19,7 +19,9 @@
 - [x] `install-vscode.sh:20` — switch `wget -qO-` to `curl -fsSL` per the Implement line. Then change the prerequisite install at `:17` from `wget gpg` to `curl gpg`, or the script pulls a package it no longer uses.
 - [x] `install-homebrew.sh:34` — `pipefail` does **not** fix this line; see BUG-02 addendum below. Capture the installer to a variable, assert it is non-empty, then execute it.
 - [x] `install-homebrew.sh:39` — `brew --version | head -n1` becomes a failure path once `pipefail` is on (SIGPIPE → 141). Convert to the reference form used by `install-tailscale.sh:23` / `install-qemu.sh:59` (`… 2>/dev/null || echo …`) in the same commit.
-- [ ] Re-check the **4** real keyring pipelines now abort on a failed fetch rather than writing a 0-byte file: `install-1password.sh:21,38,43`, `install-azcli.sh:18-19`, `install-ngrok.sh:16`, `install-vscode.sh:20-21`.
+- [x] Re-check the **4** real keyring pipelines now abort on a failed fetch rather than writing a 0-byte file: `install-1password.sh:21,38,43`, `install-azcli.sh:18-19`, `install-ngrok.sh:16`, `install-vscode.sh:20-21`.
+  - Abort: **confirmed**. All four now exit non-zero on a failed fetch (2 / 6 / 22 vs. 0 for `azcli` and `ngrok` before), and no apt source file is created.
+  - 0-byte file: **not eliminated**. `sudo tee FILE` and `gpg --output FILE` create and truncate the target as soon as they start, before curl's failure is knowable, so an empty keyring is still left behind. It is inert — nothing references it, because the matching apt source is never written — but removing it needs a fetch-to-temp restructure, which is outside this set's scope.
 - [ ] While in `install-1password.sh`: `:21` and `:43` fetch the identical key twice — collapse if trivial, otherwise leave and note it.
 
 **Scope note:** `install-chrome.sh` and `install-docker.sh` are in this set for CONF-01 consistency only. Neither pipes a network fetch — chrome has no pipelines at all, and docker's single pipeline (`:40`) is a local `echo … | sudo tee`. Both already fetch with `curl -fsSL … -o`. Do not go looking for a keyring pipeline in them.
