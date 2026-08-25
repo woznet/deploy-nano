@@ -18,8 +18,7 @@
   - **Done.** `temp_deb` is no longer `local` to `main()`; it is a script-level
     variable, and the inline `trap 'rm -f "$temp_deb"' EXIT` is replaced by the
     `cleanup()` + `trap cleanup EXIT` pair copied in shape from
-    `install-docker.sh:21-32` (A2), so both files now carry one idiom. The line
-    numbers this checklist cites (`:21-24`) were accurate.
+    `install-docker.sh:21-32` (A2), so both files now carry one idiom.
   - **Reproduced before fixing.** Under a stubbed `PATH` (`sudo`, `apt-get`,
     `curl`) with `TMPDIR` pointed at a scratch directory, the pre-fix script left
     a `tmp.*.deb` behind on all three exit paths — success (rc 0), failed
