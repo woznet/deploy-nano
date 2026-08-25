@@ -10,6 +10,16 @@ log() {
     echo -e "${BLUE}[$(date +'%T')]${NC} ${GREEN}$1${NC}"
 }
 
+# install-node.sh only exports PATH inside its own process, so pick up the npm
+# global prefix it configures in ~/.bashrc.
+rehydrate_path() {
+    case ":$PATH:" in
+        *":$HOME/.npm-global/bin:"*) ;;
+        *) export PATH="$HOME/.npm-global/bin:$PATH" ;;
+    esac
+    hash -r
+}
+
 main() {
     log "Starting GitHub Copilot CLI installation..."
 
@@ -28,6 +38,10 @@ main() {
     log "GitHub Copilot CLI $(copilot --version 2>/dev/null | head -n1) installed successfully."
 }
 
+# The guard below runs before anything hydrates PATH, so pick up the npm
+# global prefix first - otherwise an installed CLI is missed and reinstalled
+# on every run.
+rehydrate_path
 if command -v copilot >/dev/null 2>&1; then
     log "GitHub Copilot CLI is already installed. Skipping."
 else

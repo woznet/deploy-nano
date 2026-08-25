@@ -234,6 +234,10 @@ main() {
     log "Run 'openclaw onboard' to configure this machine."
 }
 
+# The guard below runs before anything hydrates PATH, so pick up the npm
+# global prefix first - otherwise an installed openclaw is missed and
+# reinstalled on every run.
+rehydrate_path
 if command -v openclaw >/dev/null 2>&1; then
     log "OpenClaw is already installed. Skipping."
 else
