@@ -13,9 +13,15 @@ log() {
 # install-node.sh only exports PATH inside its own process, so pick up the npm
 # global prefix it configures in ~/.bashrc.
 rehydrate_path() {
+    local npm_bin="$HOME/.npm-global/bin"
+
+    if command -v npm >/dev/null 2>&1; then
+        npm_bin="$(npm prefix -g 2>/dev/null)/bin"
+    fi
+
     case ":$PATH:" in
-        *":$HOME/.npm-global/bin:"*) ;;
-        *) export PATH="$HOME/.npm-global/bin:$PATH" ;;
+        *":$npm_bin:"*) ;;
+        *) export PATH="$npm_bin:$PATH" ;;
     esac
     hash -r
 }

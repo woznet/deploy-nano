@@ -51,8 +51,8 @@ The "installed but not on `PATH`" repair branch exists in `bun`/`claude`/`fnm`/`
 
 Files affected: 5 scripts
 
-### D2 (open decision) — 1Password GUI on headless hosts
+### D2 (resolved) — 1Password GUI on headless hosts
 
 **Findings:** BUG-07
 
-**Decide:** always install the GUI, split into `install-1password-cli.sh` + `install-1password.sh`, or gate the GUI on a detected desktop session. Feeds the guard fix above — a split script needs two guards and two success messages, a gated GUI needs one guard that knows which half ran.
+**Decision:** keep one script and require both `1password` and `1password-cli` in the guard so repeated runs skip only when both packages are installed. The only remaining follow-up question is whether headless hosts should continue to install the GUI unconditionally or gate it on a detected desktop session in later work.

@@ -14,9 +14,15 @@ export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
 
 # The installer writes nvm.sh as the last step, so a non-empty nvm.sh - not the
 # directory - is what proves an install actually finished. Testing for ~/.nvm
-# let an empty or half-written directory block installation permanently.
+# lets an empty or half-written directory block installation permanently.
 nvm_is_installed() {
-    [ -s "$NVM_DIR/nvm.sh" ]
+    [ -s "$NVM_DIR/nvm.sh" ] &&
+        (
+            # shellcheck source=/dev/null
+            . "$NVM_DIR/nvm.sh" >/dev/null 2>&1 &&
+                command -v nvm >/dev/null 2>&1 &&
+                nvm --version >/dev/null 2>&1
+        )
 }
 
 load_nvm() {
@@ -25,7 +31,7 @@ load_nvm() {
 }
 
 nvm_version() {
-    nvm --version 2>/dev/null || echo "unknown"
+    nvm --version
 }
 
 main() {
