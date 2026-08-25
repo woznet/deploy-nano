@@ -13,6 +13,14 @@ log() {
     echo -e "${BLUE}[$(date +'%T')]${NC} ${GREEN}$1${NC}"
 }
 
+# The script installs two packages, so the guard has to prove both are present.
+# Testing for the 'op' binary alone let a host with the CLI but no GUI skip the
+# install for good.
+needs_pkg() {
+    ! dpkg-query -W -f='${db:Status-Status}' "$1" 2>/dev/null | \
+        grep -q '^installed$'
+}
+
 main() {
     log "Starting 1Password and 1Password CLI installation..."
 
@@ -53,8 +61,8 @@ main() {
 }
 
 # Execute the main function
-if ! command -v op >/dev/null 2>&1; then
+if needs_pkg 1password || needs_pkg 1password-cli; then
     main
 else
-    log "1Password CLI already installed. Skipping."
+    log "1Password and 1Password CLI are already installed. Skipping."
 fi

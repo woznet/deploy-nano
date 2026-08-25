@@ -108,9 +108,19 @@ node_is_ready() {
 # install-node.sh only exports PATH inside its own process, so pick up the npm
 # global prefix it configures in ~/.bashrc.
 rehydrate_path() {
+    local npm_prefix
+    local npm_bin="$HOME/.npm-global/bin"
+
+    if command -v npm >/dev/null 2>&1; then
+        npm_prefix="$(npm prefix -g 2>/dev/null || true)"
+        if [ -n "$npm_prefix" ]; then
+            npm_bin="$npm_prefix/bin"
+        fi
+    fi
+
     case ":$PATH:" in
-        *":$HOME/.npm-global/bin:"*) ;;
-        *) export PATH="$HOME/.npm-global/bin:$PATH" ;;
+        *":$npm_bin:"*) ;;
+        *) export PATH="$npm_bin:$PATH" ;;
     esac
     hash -r
 }
@@ -234,6 +244,10 @@ main() {
     log "Run 'openclaw onboard' to configure this machine."
 }
 
+# The guard below runs before anything hydrates PATH, so pick up the npm
+# global prefix first - otherwise an installed openclaw is missed and
+# reinstalled on every run.
+rehydrate_path
 if command -v openclaw >/dev/null 2>&1; then
     log "OpenClaw is already installed. Skipping."
 else
