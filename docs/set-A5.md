@@ -93,7 +93,41 @@
     last line is worth having beside `install-azcli.sh`, where A5-1 does exactly
     the opposite for exactly the opposite reason.
   - `bash -n` and `shellcheck` 0.11.0 are both clean on the changed file.
-- [ ] **BUG-09** — write ngrok completions to the invoking user's home (`${SUDO_USER:-}` resolution), or skip with a warning when running as root.
+- [x] **BUG-09** — write ngrok completions to the invoking user's home (`${SUDO_USER:-}` resolution), or skip with a warning when running as root.
+  - **Done.** The three inline lines at the end of `main()` became
+    `install_completions()`. It resolves `target_user="${SUDO_USER:-$(id -un)}"`
+    — the same idiom as `install-docker.sh:96` — reads that user's home from
+    `getent passwd … | cut -d: -f6`, and writes to
+    `<their home>/.local/share/bash-completion/completions/ngrok`.
+  - **Ownership, not just path.** A new `run_as()` helper runs the `mkdir` and
+    the `tee` under `sudo -u "$user" -H` while the script is root, so the
+    directory and file belong to the operator rather than being root-owned
+    files sitting in their home. When the script is *not* root it runs the same
+    commands directly — using `sudo` there would only add a password prompt to
+    a write into the user's own home.
+  - **Root and missing-user paths.** `target_user` = `root` warns (twice: what
+    was skipped, and the one-liner to run as themselves) and returns — the
+    checklist's explicit "or skip with a warning when running as root". A
+    `SUDO_USER` with no passwd entry, or whose home does not exist, warns and
+    returns as well. None of these fail the install.
+  - **Also closed the unchecked `PATH` assumption** noted in the BUG-09 report:
+    `install_completions()` does `hash -r` and re-tests `command -v ngrok`
+    before using it, because the top-level guard already ran `command -v ngrok`
+    and bash may still hold that negative lookup. Previously the script simply
+    assumed the binary was there.
+  - **Reproduced before fixing.** Stub-`PATH` harness, `sudo` run with
+    `SUDO_USER=operator` and `HOME=/root`: the completion file was written to
+    `/root/.local/share/bash-completion/completions/ngrok` — the operator never
+    got it. The script reported "Ngrok installed successfully." regardless.
+  - **Verified after fixing.** Six cases. `sudo` as operator -> file lands in
+    `/home/operator/...`, and the `sudo -u` log shows both writes performed as
+    `operator`; direct root shell with no `SUDO_USER` -> skipped with the
+    warning, nothing written; plain non-root user -> written to their own home
+    with **no** `sudo -u` call at all; `SUDO_USER` with no passwd entry ->
+    warned and skipped; `SUDO_USER` with a non-existent home -> warned and
+    skipped; ngrok absent from `PATH` after the apt install -> warned and
+    skipped. Every case exits 0.
+  - `bash -n` and `shellcheck` 0.11.0 are both clean on the changed file.
 
 **Verify:** `apt-get update -qq` succeeds after each script on a current Ubuntu VM; `apt-key`-free layout confirmed with `apt-config dump | grep -i trusted`; completion file lands in the operator's home.
 

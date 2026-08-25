@@ -4,10 +4,64 @@ set -o pipefail
 
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
+ORANGE_RED='\033[38;5;202m'
 NC='\033[0m' # No Color
 
 log() {
     echo -e "${BLUE}[$(date +'%T')]${NC} ${GREEN}$1${NC}"
+}
+
+warn() {
+    echo -e "${BLUE}[$(date +'%T')]${NC} ${ORANGE_RED}$1${NC}" >&2
+}
+
+# Run a command as the invoking operator while we are root. When we already are
+# that operator, run it directly -- sudo would only add a needless password
+# prompt to a write into the user's own home.
+run_as() {
+    local user="$1"
+    shift
+    if [ "$(id -u)" -eq 0 ]; then
+        sudo -u "$user" -H "$@"
+    else
+        "$@"
+    fi
+}
+
+# Under 'sudo ./install-ngrok.sh', $HOME is /root, so completions written there
+# are completions the operator who ran the script never sees. Resolve the
+# invoking user the way install-docker.sh:96 does and write into *their* home,
+# or skip with a warning when there is no such user.
+install_completions() {
+    local target_user target_home comp_dir
+
+    # The top-level guard ran 'command -v ngrok' before the install, so bash may
+    # still be holding the negative lookup from it; drop that before asking
+    # again. The old code assumed ngrok was on PATH here and never checked.
+    hash -r
+    if ! command -v ngrok >/dev/null 2>&1; then
+        warn "ngrok is not on PATH after installation; skipping Bash completions."
+        return 0
+    fi
+
+    target_user="${SUDO_USER:-$(id -un)}"
+    if [ "$target_user" = "root" ]; then
+        warn "Invoking user resolved to 'root'; skipping Bash completions."
+        warn "Run this as your own user to get them:"
+        warn "  ngrok completion bash > ~/.local/share/bash-completion/completions/ngrok"
+        return 0
+    fi
+
+    target_home="$(getent passwd "$target_user" | cut -d: -f6 || true)"
+    if [ -z "$target_home" ] || [ ! -d "$target_home" ]; then
+        warn "No usable home directory for '$target_user'; skipping Bash completions."
+        return 0
+    fi
+
+    comp_dir="$target_home/.local/share/bash-completion/completions"
+    log "Installing Bash completions for $target_user into $comp_dir..."
+    run_as "$target_user" mkdir -p "$comp_dir"
+    ngrok completion bash | run_as "$target_user" tee "$comp_dir/ngrok" >/dev/null
 }
 
 main() {
@@ -38,10 +92,7 @@ main() {
     sudo DEBIAN_FRONTEND=noninteractive apt-get update -qq
     sudo DEBIAN_FRONTEND=noninteractive apt-get install -qq -y ngrok
 
-    log "Configuring user Bash completions for Ngrok..."
-    local comp_dir="$HOME/.local/share/bash-completion/completions"
-    mkdir -p "$comp_dir"
-    ngrok completion bash >"$comp_dir/ngrok"
+    install_completions
 
     log "Ngrok installed successfully."
 }
