@@ -7,10 +7,15 @@ set -o pipefail
 # Define simple color codes for terminal output
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
+ORANGE_RED='\033[38;5;202m'
 NC='\033[0m' # No Color
 
 log() {
     echo -e "${BLUE}[$(date +'%T')]${NC} ${GREEN}$1${NC}"
+}
+
+warn() {
+    echo -e "${BLUE}[$(date +'%T')]${NC} ${ORANGE_RED}$1${NC}" >&2
 }
 
 main() {
@@ -64,10 +69,11 @@ main() {
     # 6. Post-installation convenience
     log "Adding current user ($USER) to the docker group..."
     sudo usermod -aG docker "$USER"
-    newgrp docker
 
     log "Docker ecosystem installed successfully!"
-    echo -e "👉 ${BLUE}Note: 'docker' group permissions have already been applied in this terminal session.${NC}"
+    warn "Group membership does not apply to the current shell. Log out"
+    warn "and back in (or run 'newgrp docker' yourself) before using"
+    warn "docker without sudo."
 }
 
 # Execute the main function if Docker is not already installed

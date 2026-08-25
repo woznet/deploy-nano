@@ -14,7 +14,14 @@
 **File (1):** `install-docker.sh`
 **Why batched:** four defects in one 77-line file; one diff, one test run.
 
-- [ ] **BUG-01** — remove `newgrp docker` (`:66`). Replace with a `log`/`warn` line telling the operator to re-login (or run `newgrp docker` in their own shell) for group membership to apply. Correct the misleading message at `:69`.
+- [x] **BUG-01** — remove `newgrp docker` (`:66`). Replace with a `log`/`warn` line telling the operator to re-login (or run `newgrp docker` in their own shell) for group membership to apply. Correct the misleading message at `:69`.
+  - **Done.** `newgrp docker` removed. Actual line was `:67`, not `:66` —
+    A1 inserted `set -o pipefail` at `:5`, so every line this checklist
+    cites is off by one. A `warn()` helper was added, copied verbatim from
+    the existing convention in `install-qemu.sh:7,14-16` (`ORANGE_RED`,
+    `>&2`) rather than inventing a new one. The closing message now tells
+    the operator to log out and back in, or run `newgrp docker` in their
+    own shell.
 - [ ] **BUG-05** — replace `"$USER"` (`:65`) with `${SUDO_USER:-$(id -un)}`; skip the `usermod` with a warning when it resolves to `root`.
 - [ ] **BUG-04 / SEC-05** — replace `/tmp/docker-desktop.deb` (`:51`) with `mktemp --suffix=.deb`, and clean up on all exit paths (see A3 for the trap-scoping pitfall).
 - [ ] **BUG-12** — after `source /etc/os-release` (`:31`), fail loudly when `${UBUNTU_CODENAME:-$VERSION_CODENAME}` is empty instead of writing an empty `Suites:` line.
