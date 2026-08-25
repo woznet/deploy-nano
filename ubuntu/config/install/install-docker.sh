@@ -67,8 +67,15 @@ main() {
     rm -f "$temp_deb"
 
     # 6. Post-installation convenience
-    log "Adding current user ($USER) to the docker group..."
-    sudo usermod -aG docker "$USER"
+    local target_user
+    target_user="${SUDO_USER:-$(id -un)}"
+    if [ "$target_user" = "root" ]; then
+        warn "Invoking user resolved to 'root'; skipping usermod -aG docker."
+        warn "Run 'sudo usermod -aG docker <your-user>' to grant docker access."
+    else
+        log "Adding user ($target_user) to the docker group..."
+        sudo usermod -aG docker "$target_user"
+    fi
 
     log "Docker ecosystem installed successfully!"
     warn "Group membership does not apply to the current shell. Log out"

@@ -22,7 +22,15 @@
     `>&2`) rather than inventing a new one. The closing message now tells
     the operator to log out and back in, or run `newgrp docker` in their
     own shell.
-- [ ] **BUG-05** — replace `"$USER"` (`:65`) with `${SUDO_USER:-$(id -un)}`; skip the `usermod` with a warning when it resolves to `root`.
+- [x] **BUG-05** — replace `"$USER"` (`:65`) with `${SUDO_USER:-$(id -un)}`; skip the `usermod` with a warning when it resolves to `root`.
+  - **Done.** `target_user="${SUDO_USER:-$(id -un)}"`, declared then
+    assigned on separate lines to match the existing `local arch` style
+    two blocks up and to avoid introducing an SC2155 warning. When it
+    resolves to `root` the `usermod` is skipped with two `warn` lines
+    naming the manual command instead. Verified under a stubbed PATH:
+    `SUDO_USER=woz` records `usermod -aG docker woz`; with `SUDO_USER`
+    unset and `id -un` returning `root`, no `usermod` runs and the script
+    still exits 0.
 - [ ] **BUG-04 / SEC-05** — replace `/tmp/docker-desktop.deb` (`:51`) with `mktemp --suffix=.deb`, and clean up on all exit paths (see A3 for the trap-scoping pitfall).
 - [ ] **BUG-12** — after `source /etc/os-release` (`:31`), fail loudly when `${UBUNTU_CODENAME:-$VERSION_CODENAME}` is empty instead of writing an empty `Suites:` line.
 - [ ] Consider splitting Docker Desktop (GUI, `:48-58`) from Docker Engine, or gating it — see D3.
