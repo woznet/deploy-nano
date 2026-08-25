@@ -17,7 +17,7 @@
 - [x] **BUG-06** — hydrate `PATH` with `~/.npm-global/bin` (and `hash -r`) **before** the top-level guard in `install-codex.sh:32`, `install-copilot.sh:31`, `install-openclaw.sh:237`. Reuse `rehydrate_path()` from `install-openclaw.sh:110-116`; promote it to the shared helper if B1 lands first.
 - [x] **BUG-07** — make `install-1password.sh`'s guard cover both packages (e.g. `dpkg-query` on `1password` and `1password-cli`), or split the script and correct the success message.
 - [x] **BUG-11** — replace `install-nvm.sh`'s `[ ! -d "$HOME/.nvm" ]` with a check for a usable `$NVM_DIR/nvm.sh`; report the installed version in the closing log.
-- [ ] Re-run each script twice back to back; the second run must skip, not reinstall.
+- [x] Re-run each script twice back to back; the second run must skip, not reinstall.
 
 **Verify:** double-run each of the 5 on a VM; the second run's transcript must contain the "already installed. Skipping." line and no network fetch.
 
