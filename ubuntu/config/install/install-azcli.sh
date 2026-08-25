@@ -16,7 +16,7 @@ if ! command -v az >/dev/null 2>&1; then
     sudo apt-get install -qq -y apt-transport-https ca-certificates curl gnupg lsb-release
 
     sudo mkdir -p /etc/apt/keyrings
-    curl -sLS https://packages.microsoft.com/keys/microsoft.asc |
+    curl -fsSL https://packages.microsoft.com/keys/microsoft.asc |
         gpg --dearmor | sudo tee /etc/apt/keyrings/microsoft.gpg >/dev/null
     sudo chmod go+r /etc/apt/keyrings/microsoft.gpg
 

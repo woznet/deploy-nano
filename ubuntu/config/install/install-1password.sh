@@ -19,7 +19,7 @@ main() {
     # 1. Add the GPG key
     log "Adding 1Password GPG key..."
     # Using --yes to prevent gpg from hanging if the key already exists
-    curl -sS https://downloads.1password.com/linux/keys/1password.asc | \
+    curl -fsSL https://downloads.1password.com/linux/keys/1password.asc | \
         sudo gpg --yes --dearmor --output /usr/share/keyrings/1password-archive-keyring.gpg
 
     # 2. Add the apt repository
@@ -36,12 +36,12 @@ main() {
     log "Configuring debsig-verify policies for package security..."
     sudo mkdir -p /etc/debsig/policies/AC2D62742012EA22/
 
-    curl -sS https://downloads.1password.com/linux/debian/debsig/1password.pol | \
+    curl -fsSL https://downloads.1password.com/linux/debian/debsig/1password.pol | \
         sudo tee /etc/debsig/policies/AC2D62742012EA22/1password.pol >/dev/null
 
     sudo mkdir -p /usr/share/debsig/keyrings/AC2D62742012EA22
 
-    curl -sS https://downloads.1password.com/linux/keys/1password.asc | \
+    curl -fsSL https://downloads.1password.com/linux/keys/1password.asc | \
         sudo gpg --yes --dearmor --output /usr/share/debsig/keyrings/AC2D62742012EA22/debsig.gpg
 
     # 4. Install both packages
