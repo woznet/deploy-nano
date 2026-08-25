@@ -14,7 +14,7 @@
 **Files (8):** `install-1password.sh`, `install-azcli.sh`, `install-chrome.sh`, `install-docker.sh`, `install-homebrew.sh`, `install-ngrok.sh`, `install-nvm.sh`, `install-vscode.sh`
 **Why batched:** one identical two-line change plus a flag normalisation; identical verification for all eight.
 
-- [ ] Add `set -o pipefail` immediately after `set -e` in all 8 scripts.
+- [x] Add `set -o pipefail` immediately after `set -e` in all 8 scripts.
 - [ ] Normalise every fetch to `curl -fsSL` (adds `--fail`) at all **5** sites that lack it: `install-1password.sh:21,38,43` (`-sS`), `install-azcli.sh:18` (`-sLS`), `install-ngrok.sh:16` (`-sSL`), `install-nvm.sh:16` (`-o-`), `install-vscode.sh:20` (`wget -qO-`).
 - [ ] `install-vscode.sh:20` — switch `wget -qO-` to `curl -fsSL` per the Implement line. Then change the prerequisite install at `:17` from `wget gpg` to `curl gpg`, or the script pulls a package it no longer uses.
 - [ ] `install-homebrew.sh:34` — `pipefail` does **not** fix this line; see BUG-02 addendum below. Capture the installer to a variable, assert it is non-empty, then execute it.

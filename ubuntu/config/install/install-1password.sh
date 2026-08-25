@@ -2,6 +2,7 @@
 
 # Exit immediately if a command exits with a non-zero status
 set -e
+set -o pipefail
 
 # Define simple color codes for terminal output
 GREEN='\033[0;32m'

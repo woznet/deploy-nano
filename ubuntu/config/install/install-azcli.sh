@@ -1,5 +1,6 @@
 #!/bin/bash
 set -e
+set -o pipefail
 
 # Define simple color codes for terminal output
 GREEN='\033[0;32m'
