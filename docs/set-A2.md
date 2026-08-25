@@ -1,0 +1,77 @@
+# Checklist Set A2
+
+> **AGENT PRE-FLIGHT DIRECTIVE:** 
+> 1. Inspect all target files to verify each checklist item is still unresolved before modifying code.
+> 2. Skip items already implemented in the current working tree.
+> 3. Only execute changes for actively reproduced or verified gaps.
+
+## Checklist
+
+### Set A2 — `install-docker.sh` repair pass — *≈45 min*
+
+**Implement:** One file, four defects — drop `newgrp`, resolve the real invoking user, use `mktemp` with cleanup on every exit path, and refuse to write an empty apt `Suites:` line
+**Findings:** BUG-01, BUG-04, BUG-05, BUG-12, SEC-05
+**File (1):** `install-docker.sh`
+**Why batched:** four defects in one 77-line file; one diff, one test run.
+
+- [ ] **BUG-01** — remove `newgrp docker` (`:66`). Replace with a `log`/`warn` line telling the operator to re-login (or run `newgrp docker` in their own shell) for group membership to apply. Correct the misleading message at `:69`.
+- [ ] **BUG-05** — replace `"$USER"` (`:65`) with `${SUDO_USER:-$(id -un)}`; skip the `usermod` with a warning when it resolves to `root`.
+- [ ] **BUG-04 / SEC-05** — replace `/tmp/docker-desktop.deb` (`:51`) with `mktemp --suffix=.deb`, and clean up on all exit paths (see A3 for the trap-scoping pitfall).
+- [ ] **BUG-12** — after `source /etc/os-release` (`:31`), fail loudly when `${UBUNTU_CODENAME:-$VERSION_CODENAME}` is empty instead of writing an empty `Suites:` line.
+- [ ] Consider splitting Docker Desktop (GUI, `:48-58`) from Docker Engine, or gating it — see D3.
+
+**Verify:** `bash -n` + `shellcheck`; run on a clean Ubuntu VM **non-interactively** (`bash install-docker.sh < /dev/null`) and confirm it runs to completion without blocking, that `/tmp` holds no leftover `.deb`, and that `getent group docker` lists the invoking user.
+
+**Depends on:** A1 (this file is one of the eight `pipefail` targets) and A3 (share one temp-file idiom). Blocked in part by D3 — the Docker Desktop scope decision.
+
+## Code-review Report
+
+### BUG-01 — `newgrp docker` breaks unattended execution — **High**
+
+**File:** `ubuntu/config/install/install-docker.sh:66`
+
+```bash
+sudo usermod -aG docker "$USER"
+newgrp docker
+```
+
+`newgrp` does not modify the current shell; it starts a **new shell** that inherits stdin. In a script this means one of two failure modes:
+
+- Run from a terminal (`./install-docker.sh`): a new interactive shell starts and the script **blocks** until someone types `exit`. Lines 68-69 do not run until then.
+- Run with stdin from a pipe (`curl … | bash`, CI, cloud-init): the new shell consumes what remains on stdin, and the script ends early or behaves unpredictably.
+
+Either way the group membership does **not** propagate to the caller once the script exits, so the mechanism does not achieve its stated goal. Line 69's message ("permissions have already been applied in this terminal session") is therefore inaccurate.
+
+**Fix direction:** drop `newgrp`; log that the operator must re-login (or run `newgrp docker` themselves) for the group to take effect.
+
+> This specific behaviour was reasoned from `newgrp` semantics, not reproduced here — `newgrp` does not exist on the Windows review host. Confirm on an Ubuntu box alongside the fix.
+
+### BUG-04 — Predictable, unswept temp path in `install-docker.sh` — **Medium**
+
+**File:** `install-docker.sh:51`, cleanup at `:61`
+
+`local temp_deb="/tmp/docker-desktop.deb"` is a fixed path in a world-writable directory, removed only on the success path (`:61`). Any failure between `:54` and `:58` leaves a large file behind, and on a multi-user host another user can pre-create or symlink that path. `install-chrome.sh` already uses `mktemp` — the two sibling scripts should agree.
+
+### BUG-05 — `usermod -aG docker "$USER"` targets the wrong user — **Medium**
+
+**File:** `install-docker.sh:65`
+
+`$USER` is set by login shells, not by bash generally. Under `sudo ./install-docker.sh` it is commonly `root`; under a non-login shell (cron, cloud-init, `bash -c`) it can be empty, in which case `usermod` fails and, with `set -e`, aborts the script after Docker is already installed. **Fix direction:** `${SUDO_USER:-$(id -un)}`, plus a guard against `root`.
+
+### BUG-12 — `source /etc/os-release` leaks variables and can yield an empty suite — **Low**
+
+**File:** `install-docker.sh:31-32`
+
+Sourcing inside `main()` defines `NAME`, `VERSION`, `ID`, … as globals. More importantly, `${UBUNTU_CODENAME:-$VERSION_CODENAME}` silently becomes empty on a distro that sets neither, and an empty `Suites:` line is written to `/etc/apt/sources.list.d/docker.sources` without complaint. A non-empty check belongs here.
+
+### SEC-05 — Predictable `/tmp` artifact
+
+`install-docker.sh:51` uses a fixed, world-writable path for the Docker Desktop `.deb`. On a multi-user host another user can pre-create or symlink that path before the download lands. Same defect as BUG-04, recorded separately as a security-posture item.
+
+Files affected: 1 script
+
+### D3 (open decision) — Docker Desktop scope
+
+**Findings:** BUG-04 context (`install-docker.sh:48-58`)
+
+**Decide:** is Docker Desktop wanted on these QEMU guests (it needs a desktop session and nested virtualisation), or should the script stop at Engine + CLI plugins with Desktop as an opt-in flag? The answer determines whether lines 48-58 — and therefore the temp-file work in BUG-04/SEC-05 — stay in this script at all.
