@@ -1,5 +1,6 @@
 #!/bin/bash
 set -e
+set -o pipefail
 
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
@@ -13,7 +14,7 @@ main() {
     log "Starting Ngrok installation..."
 
     log "Adding Ngrok GPG key and repository..."
-    curl -sSL https://ngrok-agent.s3.amazonaws.com/ngrok.asc | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null
+    curl -fsSL https://ngrok-agent.s3.amazonaws.com/ngrok.asc | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null
     echo "deb https://ngrok-agent.s3.amazonaws.com bookworm main" | sudo tee /etc/apt/sources.list.d/ngrok.list >/dev/null
 
     log "Updating apt and installing Ngrok..."

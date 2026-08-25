@@ -1,5 +1,6 @@
 #!/bin/bash
 set -e
+set -o pipefail
 
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
@@ -13,7 +14,7 @@ main() {
     log "Starting NVM installation..."
 
     log "Downloading and running NVM install script..."
-    curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
+    curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
 
     log "Loading NVM into the current session..."
     export NVM_DIR="$HOME/.nvm"

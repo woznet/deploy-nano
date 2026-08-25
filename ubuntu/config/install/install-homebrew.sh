@@ -1,5 +1,6 @@
 #!/bin/bash
 set -e
+set -o pipefail
 
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
@@ -31,12 +32,24 @@ main() {
     sudo DEBIAN_FRONTEND=noninteractive apt-get install -qq -y build-essential procps curl file git
 
     log "Downloading and running the Homebrew install script..."
-    NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+    # Capture first: this is command substitution, not a pipeline, so pipefail
+    # cannot help. A failed fetch would otherwise expand to an empty string and
+    # `bash -c ""` would exit 0, reporting a successful install that never ran.
+    local brew_installer
+    if ! brew_installer="$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" || [ -z "$brew_installer" ]; then
+        log "Failed to download the Homebrew install script."
+        exit 1
+    fi
+    NONINTERACTIVE=1 /bin/bash -c "$brew_installer"
 
     log "Loading Homebrew into the current session..."
     ensure_shellenv
 
-    log "Homebrew $(brew --version | head -n1) installed successfully."
+    # No pipeline here: `brew --version | head -n1` would be a pipefail
+    # hazard, and a failing brew silently rendered an empty version string.
+    local brew_version
+    brew_version="$(head -n1 <<<"$(brew --version 2>/dev/null || echo 'installed')")"
+    log "Homebrew $brew_version installed successfully."
 }
 if command -v brew >/dev/null 2>&1; then
     log "Homebrew is already installed and on PATH. Skipping."
