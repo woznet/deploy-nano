@@ -14,8 +14,18 @@ main() {
     log "Starting Ngrok installation..."
 
     log "Adding Ngrok GPG key and repository..."
-    curl -fsSL https://ngrok-agent.s3.amazonaws.com/ngrok.asc | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null
-    echo "deb https://ngrok-agent.s3.amazonaws.com bookworm main" | sudo tee /etc/apt/sources.list.d/ngrok.list >/dev/null
+    sudo install -m 0755 -d /etc/apt/keyrings
+    curl -fsSL https://ngrok-agent.s3.amazonaws.com/ngrok.asc |
+        sudo tee /etc/apt/keyrings/ngrok.asc >/dev/null
+    sudo chmod a+r /etc/apt/keyrings/ngrok.asc
+
+    # A key in /etc/apt/trusted.gpg.d is trusted for *every* repository on the
+    # host, not just ngrok's. Remove the copy an earlier run of this script left
+    # there -- without this, moving the key scopes nothing on an existing host.
+    sudo rm -f /etc/apt/trusted.gpg.d/ngrok.asc
+
+    echo "deb [signed-by=/etc/apt/keyrings/ngrok.asc] https://ngrok-agent.s3.amazonaws.com bookworm main" |
+        sudo tee /etc/apt/sources.list.d/ngrok.list >/dev/null
 
     log "Updating apt and installing Ngrok..."
     sudo DEBIAN_FRONTEND=noninteractive apt-get update -qq

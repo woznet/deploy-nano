@@ -53,7 +53,29 @@
   - `bash -n` and `shellcheck` 0.11.0 are both clean on the changed file.
   - Left for B4 per CONF-02: no `main()` restructure: the install logic stays
     inline in the `if` branch so that diff stays mechanical.
-- [ ] **SEC-02** — move the ngrok key out of `/etc/apt/trusted.gpg.d/` into `/etc/apt/keyrings/ngrok.asc` and reference it with `signed-by=` in the repo line (`install-ngrok.sh:16-17`), matching `docker`/`vscode`/`azcli`.
+- [x] **SEC-02** — move the ngrok key out of `/etc/apt/trusted.gpg.d/` into `/etc/apt/keyrings/ngrok.asc` and reference it with `signed-by=` in the repo line (`install-ngrok.sh:16-17`), matching `docker`/`vscode`/`azcli`.
+  - **Done.** The key is fetched to `/etc/apt/keyrings/ngrok.asc` after a
+    `sudo install -m 0755 -d /etc/apt/keyrings`, made world-readable with
+    `chmod a+r`, and the repo line now carries
+    `[signed-by=/etc/apt/keyrings/ngrok.asc]` — the same three-step shape as
+    `install-docker.sh:56-59`, which already relies on an *armoured* `.asc`
+    under `signed-by=`, so no dearmouring step is needed here either.
+  - **Also removes the old key.** `sudo rm -f /etc/apt/trusted.gpg.d/ngrok.asc`
+    runs alongside the write. Without it the fix scopes nothing on a host any
+    earlier run of this script has already touched: the globally-trusted copy
+    would simply stay there next to the new scoped one. This is the only change
+    in A5 that deletes pre-existing state on the host, and it is deliberate.
+  - **Reproduced before fixing.** Stub-`PATH` harness with a fake root, in all
+    three invocation modes (sudo-as-operator, direct root, plain user): the key
+    landed in `/etc/apt/trusted.gpg.d/ngrok.asc`, `/etc/apt/keyrings/` was never
+    created, and the repo line was a bare
+    `deb https://ngrok-agent.s3.amazonaws.com bookworm main` with no `signed-by=`.
+  - **Verified after fixing.** Same three modes, and additionally with the host
+    pre-seeded with the old globally-trusted key to simulate an already-
+    provisioned machine: `/etc/apt/trusted.gpg.d/ngrok.asc` absent in every
+    case, `/etc/apt/keyrings/ngrok.asc` present, repo line
+    `deb [signed-by=/etc/apt/keyrings/ngrok.asc] https://ngrok-agent.s3.amazonaws.com bookworm main`.
+  - `bash -n` and `shellcheck` 0.11.0 are both clean on the changed file.
 - [ ] **SEC-02** — document (inline comment) why the Debian suite `bookworm` is used on Ubuntu, or switch to whatever ngrok currently publishes.
 - [ ] **BUG-09** — write ngrok completions to the invoking user's home (`${SUDO_USER:-}` resolution), or skip with a warning when running as root.
 
