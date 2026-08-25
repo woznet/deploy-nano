@@ -31,6 +31,10 @@ load_nvm() {
 }
 
 nvm_version() {
+    if ! command -v nvm >/dev/null 2>&1; then
+        # shellcheck source=/dev/null
+        . "$NVM_DIR/nvm.sh"
+    fi
     nvm --version
 }
 
