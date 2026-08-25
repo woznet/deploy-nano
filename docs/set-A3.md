@@ -31,7 +31,17 @@
     stub `PATH` so `main()` never runs: the script-level trap still fires, the
     `[ -n "$temp_deb" ]` guard makes it a no-op, exit 0.
   - `bash -n` and `shellcheck` are both clean on the changed file.
-- [ ] Alternative accepted form: keep it `local` and `rm -f "$temp_deb"` at the end of `main()`, with the trap only covering the failure path.
+- [x] Alternative accepted form: keep it `local` and `rm -f "$temp_deb"` at the end of `main()`, with the trap only covering the failure path.
+  - **Considered and rejected — not implemented.** This box is ticked to record
+    that the alternative was evaluated, *not* that it was applied. Only one of
+    the two forms can be in the tree: item 3 requires the identical idiom in
+    both files, and A2 had already committed `install-docker.sh` to the
+    script-scope form, so adopting this one would have meant reopening a merged
+    set to rewrite it. The `local` + explicit `rm -f` form is also the weaker of
+    the two here — it needs the cleanup duplicated at the end of `main()` *and*
+    in a failure-path trap, which is precisely the split that let BUG-03 hide.
+  - Nothing in `install-chrome.sh` implements this form; see item 1 for what
+    actually shipped.
 - [ ] Apply the identical chosen idiom in `install-docker.sh` (A2).
 
 **Verify:** run in a scratch copy with a stubbed `apt-get`; confirm no `tmp.*.deb` remains after both a successful and a failed run.
