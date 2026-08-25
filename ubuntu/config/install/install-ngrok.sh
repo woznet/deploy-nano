@@ -22,7 +22,7 @@ run_as() {
     local user="$1"
     shift
     if [ "$(id -u)" -eq 0 ]; then
-        sudo -u "$user" -H "$@"
+        sudo -u "$user" -H -- "$@"
     else
         "$@"
     fi
@@ -44,7 +44,11 @@ install_completions() {
         return 0
     fi
 
-    target_user="${SUDO_USER:-$(id -un)}"
+    if [ "$(id -u)" -eq 0 ]; then
+        target_user="${SUDO_USER:-root}"
+    else
+        target_user="$(id -un)"
+    fi
     if [ "$target_user" = "root" ]; then
         warn "Invoking user resolved to 'root'; skipping Bash completions."
         warn "Run this as your own user to get them:"

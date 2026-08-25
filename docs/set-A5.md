@@ -153,9 +153,9 @@
 
 Files affected: 1 script
 
-### BUG-02 (context) — Why a broken source survives
+### BUG-02 (context) — Why a broken source survives (pre-A1)
 
-Neither script sets `pipefail`, so a failed key fetch writes a **0-byte keyring** and the apt source is registered against it anyway: `install-azcli.sh:18-19` for `/etc/apt/keyrings/microsoft.gpg`, `install-ngrok.sh:16` for `/etc/apt/trusted.gpg.d/ngrok.asc`. The failure only surfaces later as an opaque `apt-get update` error — in a *different* script's run. A1 fixes the pipeline; this set fixes what the pipeline writes.
+Before the A1 fixes, neither script set `pipefail`, so a failed key fetch wrote a **0-byte keyring** and the apt source was registered against it anyway. The failure only surfaced later as an opaque `apt-get update` error — in a *different* script's run. Both `install-azcli.sh` and `install-ngrok.sh` now set `set -e` and `set -o pipefail`; this set fixes what the pipeline writes.
 
 ### CONF-02 (context) — `install-azcli.sh` has no `main()`
 
