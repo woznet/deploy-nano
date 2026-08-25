@@ -24,6 +24,13 @@ main() {
     # there -- without this, moving the key scopes nothing on an existing host.
     sudo rm -f /etc/apt/trusted.gpg.d/ngrok.asc
 
+    # 'bookworm' is a Debian suite and is deliberately NOT derived from the
+    # host's codename. ngrok publishes one apt repository for every Debian and
+    # Ubuntu host, and its bucket carries Debian suites only -- dists/ holds
+    # bookworm, bullseye and buster and nothing else; there has never been a
+    # noble/jammy/focal there. bookworm is the newest of the three, and the
+    # package itself is a release-independent static binary. Do not template
+    # this from /etc/os-release: every Ubuntu codename 404s.
     echo "deb [signed-by=/etc/apt/keyrings/ngrok.asc] https://ngrok-agent.s3.amazonaws.com bookworm main" |
         sudo tee /etc/apt/sources.list.d/ngrok.list >/dev/null
 

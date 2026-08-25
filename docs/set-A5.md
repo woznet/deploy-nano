@@ -76,7 +76,23 @@
     case, `/etc/apt/keyrings/ngrok.asc` present, repo line
     `deb [signed-by=/etc/apt/keyrings/ngrok.asc] https://ngrok-agent.s3.amazonaws.com bookworm main`.
   - `bash -n` and `shellcheck` 0.11.0 are both clean on the changed file.
-- [ ] **SEC-02** — document (inline comment) why the Debian suite `bookworm` is used on Ubuntu, or switch to whatever ngrok currently publishes.
+- [x] **SEC-02** — document (inline comment) why the Debian suite `bookworm` is used on Ubuntu, or switch to whatever ngrok currently publishes.
+  - **Resolved as "document", on evidence.** The checklist offered a switch as
+    the alternative; there is nothing to switch to. Enumerating the live bucket
+    (`ngrok-agent.s3.amazonaws.com/?list-type=2&prefix=dists/&delimiter=/`)
+    returns exactly three suites — `bookworm`, `bullseye`, `buster` — all
+    Debian, no Ubuntu codename at all. Per-suite probes agree: `bookworm` and
+    `bullseye` 200; `trixie`, `noble`, `jammy`, `focal`, `resolute`, `questing`,
+    `plucky`, `stable`, `oldstable` all 404. `bookworm` is already the newest
+    suite ngrok publishes.
+  - **Done.** Inline comment above the repo line records that the suite is
+    Debian's and deliberately not derived from the host codename, what the
+    bucket actually contains, that the package is a release-independent static
+    binary, and — the part that matters for whoever reads this next — that
+    templating it from `/etc/os-release` would 404 on every Ubuntu host. That
+    last line is worth having beside `install-azcli.sh`, where A5-1 does exactly
+    the opposite for exactly the opposite reason.
+  - `bash -n` and `shellcheck` 0.11.0 are both clean on the changed file.
 - [ ] **BUG-09** — write ngrok completions to the invoking user's home (`${SUDO_USER:-}` resolution), or skip with a warning when running as root.
 
 **Verify:** `apt-get update -qq` succeeds after each script on a current Ubuntu VM; `apt-key`-free layout confirmed with `apt-config dump | grep -i trusted`; completion file lands in the operator's home.
