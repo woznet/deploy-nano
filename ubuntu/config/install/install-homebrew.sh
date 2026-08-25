@@ -36,8 +36,7 @@ main() {
     # cannot help. A failed fetch would otherwise expand to an empty string and
     # `bash -c ""` would exit 0, reporting a successful install that never ran.
     local brew_installer
-    brew_installer="$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-    if [ -z "$brew_installer" ]; then
+    if ! brew_installer="$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" || [ -z "$brew_installer" ]; then
         log "Failed to download the Homebrew install script."
         exit 1
     fi
