@@ -23,9 +23,11 @@ warn() {
 docker_desktop_deb=''
 
 cleanup() {
+    local status=$?
     if [ -n "$docker_desktop_deb" ]; then
-        rm -f "$docker_desktop_deb"
+        rm -f "$docker_desktop_deb" || true
     fi
+    return "$status"
 }
 trap cleanup EXIT
 
