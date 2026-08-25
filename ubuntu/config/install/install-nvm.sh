@@ -45,13 +45,19 @@ main() {
         log "NVM install did not produce a usable $NVM_DIR/nvm.sh." >&2
         exit 1
     fi
-    load_nvm
+    if ! load_nvm; then
+        log "Failed to load NVM from $NVM_DIR/nvm.sh." >&2
+        exit 1
+    fi
 
     log "NVM $(nvm_version) installed successfully."
 }
 
 if nvm_is_installed; then
-    load_nvm
+    if ! load_nvm; then
+        log "Failed to load NVM from $NVM_DIR/nvm.sh." >&2
+        exit 1
+    fi
     log "NVM $(nvm_version) is already installed. Skipping."
 else
     main
