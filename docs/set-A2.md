@@ -62,7 +62,24 @@
     leaks `NAME`, `VERSION`, `ID`, ... into the global namespace. The
     checklist item covers only the empty-suite check, so the leak is left
     alone.
-- [ ] Consider splitting Docker Desktop (GUI, `:48-58`) from Docker Engine, or gating it — see D3.
+- [x] Consider splitting Docker Desktop (GUI, `:48-58`) from Docker Engine, or gating it — see D3.
+  - **D3 resolved: gated, not split.** Docker Desktop wants a desktop
+    session and nested virtualisation, neither of which a headless QEMU
+    guest has, so it is no longer installed by default. The block is lifted
+    into an `install_docker_desktop()` function called only when
+    `INSTALL_DOCKER_DESKTOP=1`; otherwise the script logs that it skipped it
+    and names the variable. Engine + CLI plugins remain the default.
+  - Gating rather than splitting to a second script keeps the change inside
+    the single file this set declares, and keeps the BUG-04 / SEC-05
+    `mktemp` work relevant instead of moving it elsewhere.
+  - Verified: flag unset -> no fetch of `desktop.docker.com`, no `mktemp`
+    call, Engine still installed, exit 0. `INSTALL_DOCKER_DESKTOP=1` ->
+    Desktop downloaded and the temp file still removed on exit, so the
+    A2-3 trap survives the move into a function. `=0` behaves as unset.
+  - **Note for whoever owns the docs:** this changes the default behaviour
+    of the script. `README.md` is outside this set’s declared file scope
+    so it was not touched, but the new opt-in variable is worth documenting
+    there.
 
 **Verify:** `bash -n` + `shellcheck`; run on a clean Ubuntu VM **non-interactively** (`bash install-docker.sh < /dev/null`) and confirm it runs to completion without blocking, that `/tmp` holds no leftover `.deb`, and that `getent group docker` lists the invoking user.
 

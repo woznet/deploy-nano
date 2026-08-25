@@ -29,6 +29,19 @@ cleanup() {
 }
 trap cleanup EXIT
 
+install_docker_desktop() {
+    log "Downloading Docker Desktop..."
+    local desktop_url="https://desktop.docker.com/linux/main/amd64/docker-desktop-amd64.deb"
+    docker_desktop_deb=$(mktemp --suffix=.deb)
+
+    # Download the deb file to a private temp path; cleanup() removes it
+    curl -fsSL "$desktop_url" -o "$docker_desktop_deb"
+
+    log "Installing Docker Desktop (This may take a minute to pull GUI dependencies)..."
+    # Installing via apt instead of dpkg ensures all missing GUI dependencies are pulled automatically
+    sudo DEBIAN_FRONTEND=noninteractive apt-get install -qq -y "$docker_desktop_deb"
+}
+
 main() {
     log "Starting Docker ecosystem installation..."
 
@@ -68,17 +81,13 @@ main() {
     sudo DEBIAN_FRONTEND=noninteractive apt-get install -qq -y \
         docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 
-    # 5. Download and Install Docker Desktop
-    log "Downloading Docker Desktop..."
-    local desktop_url="https://desktop.docker.com/linux/main/amd64/docker-desktop-amd64.deb"
-    docker_desktop_deb=$(mktemp --suffix=.deb)
-
-    # Download the deb file to a private temp path; cleanup() removes it
-    curl -fsSL "$desktop_url" -o "$docker_desktop_deb"
-
-    log "Installing Docker Desktop (This may take a minute to pull GUI dependencies)..."
-    # Installing via apt instead of dpkg ensures all missing GUI dependencies are pulled automatically
-    sudo DEBIAN_FRONTEND=noninteractive apt-get install -qq -y "$docker_desktop_deb"
+    # 5. Docker Desktop is opt-in: it wants a desktop session and nested
+    # virtualisation, neither of which a headless QEMU guest has.
+    if [ "${INSTALL_DOCKER_DESKTOP:-0}" = "1" ]; then
+        install_docker_desktop
+    else
+        log "Skipping Docker Desktop (set INSTALL_DOCKER_DESKTOP=1 to install it)."
+    fi
 
     # 6. Post-installation convenience
     local target_user
