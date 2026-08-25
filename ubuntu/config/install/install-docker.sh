@@ -7,10 +7,41 @@ set -o pipefail
 # Define simple color codes for terminal output
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
+ORANGE_RED='\033[38;5;202m'
 NC='\033[0m' # No Color
 
 log() {
     echo -e "${BLUE}[$(date +'%T')]${NC} ${GREEN}$1${NC}"
+}
+
+warn() {
+    echo -e "${BLUE}[$(date +'%T')]${NC} ${ORANGE_RED}$1${NC}" >&2
+}
+
+# Script scope, not local to main(): the EXIT trap fires after main() has
+# returned, and a local would be out of scope and expand to the empty string.
+docker_desktop_deb=''
+
+cleanup() {
+    local status=$?
+    if [ -n "$docker_desktop_deb" ]; then
+        rm -f "$docker_desktop_deb" || true
+    fi
+    return "$status"
+}
+trap cleanup EXIT
+
+install_docker_desktop() {
+    log "Downloading Docker Desktop..."
+    local desktop_url="https://desktop.docker.com/linux/main/amd64/docker-desktop-amd64.deb"
+    docker_desktop_deb=$(mktemp --suffix=.deb)
+
+    # Download the deb file to a private temp path; cleanup() removes it
+    curl -fsSL "$desktop_url" -o "$docker_desktop_deb"
+
+    log "Installing Docker Desktop (This may take a minute to pull GUI dependencies)..."
+    # Installing via apt instead of dpkg ensures all missing GUI dependencies are pulled automatically
+    sudo DEBIAN_FRONTEND=noninteractive apt-get install -qq -y "$docker_desktop_deb"
 }
 
 main() {
@@ -31,6 +62,12 @@ main() {
     log "Configuring the Docker apt repository..."
     source /etc/os-release
     local os_suite="${UBUNTU_CODENAME:-$VERSION_CODENAME}"
+    if [ -z "$os_suite" ]; then
+        warn "Could not determine the distribution codename from /etc/os-release."
+        warn "Neither UBUNTU_CODENAME nor VERSION_CODENAME is set; refusing to"
+        warn "write an apt source with an empty 'Suites:' line."
+        exit 1
+    fi
 
     local arch
     arch=$(dpkg --print-architecture)
@@ -46,28 +83,29 @@ main() {
     sudo DEBIAN_FRONTEND=noninteractive apt-get install -qq -y \
         docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 
-    # 5. Download and Install Docker Desktop
-    log "Downloading Docker Desktop..."
-    local desktop_url="https://desktop.docker.com/linux/main/amd64/docker-desktop-amd64.deb"
-    local temp_deb="/tmp/docker-desktop.deb"
-
-    # Download the deb file to the /tmp directory
-    curl -fsSL "$desktop_url" -o "$temp_deb"
-
-    log "Installing Docker Desktop (This may take a minute to pull GUI dependencies)..."
-    # Installing via apt instead of dpkg ensures all missing GUI dependencies are pulled automatically
-    sudo DEBIAN_FRONTEND=noninteractive apt-get install -qq -y "$temp_deb"
-
-    # Clean up the downloaded deb file
-    rm -f "$temp_deb"
+    # 5. Docker Desktop is opt-in: it wants a desktop session and nested
+    # virtualisation, neither of which a headless QEMU guest has.
+    if [ "${INSTALL_DOCKER_DESKTOP:-0}" = "1" ]; then
+        install_docker_desktop
+    else
+        log "Skipping Docker Desktop (set INSTALL_DOCKER_DESKTOP=1 to install it)."
+    fi
 
     # 6. Post-installation convenience
-    log "Adding current user ($USER) to the docker group..."
-    sudo usermod -aG docker "$USER"
-    newgrp docker
+    local target_user
+    target_user="${SUDO_USER:-$(id -un)}"
+    if [ "$target_user" = "root" ]; then
+        warn "Invoking user resolved to 'root'; skipping usermod -aG docker."
+        warn "Run 'sudo usermod -aG docker <your-user>' to grant docker access."
+    else
+        log "Adding user ($target_user) to the docker group..."
+        sudo usermod -aG docker "$target_user"
+    fi
 
     log "Docker ecosystem installed successfully!"
-    echo -e "👉 ${BLUE}Note: 'docker' group permissions have already been applied in this terminal session.${NC}"
+    warn "Group membership does not apply to the current shell. Log out"
+    warn "and back in (or run 'newgrp docker' yourself) before using"
+    warn "docker without sudo."
 }
 
 # Execute the main function if Docker is not already installed
