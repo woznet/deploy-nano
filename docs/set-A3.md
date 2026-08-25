@@ -42,7 +42,28 @@
     in a failure-path trap, which is precisely the split that let BUG-03 hide.
   - Nothing in `install-chrome.sh` implements this form; see item 1 for what
     actually shipped.
-- [ ] Apply the identical chosen idiom in `install-docker.sh` (A2).
+- [x] Apply the identical chosen idiom in `install-docker.sh` (A2).
+  - **Already satisfied by A2; ratified here, no edit made.** A2 deliberately did
+    not copy the broken `install-chrome.sh` idiom and shipped the script-scope
+    variable + `cleanup()` + `trap cleanup EXIT` form at `install-docker.sh:21-32`,
+    explicitly deferring the *choice* of idiom to this set. A3 confirms that
+    choice, so `install-docker.sh` is untouched on this branch — nothing in A2's
+    merged work is reopened.
+  - **Idioms confirmed identical**, not merely similar: `install-docker.sh:21-32`
+    and `install-chrome.sh:13-24` diff clean once the variable name
+    (`docker_desktop_deb` vs `temp_deb`) is normalised — same comment, same
+    `$?` capture, same `[ -n … ]` guard, same `rm -f … || true`, same
+    `return "$status"`, same script-level `trap cleanup EXIT`.
+  - **Re-verified under the same harness** used for item 1, on the only path that
+    calls `mktemp` (`INSTALL_DOCKER_DESKTOP=1`): success (rc 0), failed download
+    (rc 22), failed `apt-get install` of the `.deb` (rc 100), and the default
+    Desktop-off path (rc 0) — no `*.deb` left in `TMPDIR` in any of the four.
+    Reaching the download at all needs `/etc/os-release` and `/etc/apt` redirected
+    into the sandbox by `sed`, the same technique A2 used, since the review host
+    is not Ubuntu.
+  - `shellcheck` reports one pre-existing `SC1091 (info)` on A2's
+    `source /etc/os-release` (it cannot follow a file outside the input set). Not
+    introduced here and out of this set's scope; `bash -n` is clean.
 
 **Verify:** run in a scratch copy with a stubbed `apt-get`; confirm no `tmp.*.deb` remains after both a successful and a failed run.
 
