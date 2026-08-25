@@ -31,7 +31,22 @@
     `SUDO_USER=woz` records `usermod -aG docker woz`; with `SUDO_USER`
     unset and `id -un` returning `root`, no `usermod` runs and the script
     still exits 0.
-- [ ] **BUG-04 / SEC-05** — replace `/tmp/docker-desktop.deb` (`:51`) with `mktemp --suffix=.deb`, and clean up on all exit paths (see A3 for the trap-scoping pitfall).
+- [x] **BUG-04 / SEC-05** — replace `/tmp/docker-desktop.deb` (`:51`) with `mktemp --suffix=.deb`, and clean up on all exit paths (see A3 for the trap-scoping pitfall).
+  - **Done.** `mktemp --suffix=.deb` replaces the fixed
+    `/tmp/docker-desktop.deb`, and the success-only `rm -f` is replaced by
+    a `cleanup`/`trap ... EXIT` pair.
+  - **On the trap-scoping pitfall this item defers to A3:** the variable is
+    declared at *script* scope, deliberately not `local`. The referenced
+    model, `install-chrome.sh:22-24`, declares `local temp_deb` inside
+    `main()` and then traps on `EXIT`; because the trap fires only after
+    `main()` has returned, `$temp_deb` is out of scope by then and it runs
+    `rm -f ""`, cleaning up nothing. That idiom was **not** copied. Aligning
+    the two files is left to A3, which owns the shared idiom;
+    `install-chrome.sh` is untouched here.
+  - Verified under a stubbed PATH that the `mktemp` file is removed on all
+    three exit paths: success (exit 0), `curl` failing on the Desktop
+    download (exit 22), and `apt-get` failing on the `.deb` (exit 100). No
+    `/tmp/docker-desktop.deb` is created any more.
 - [ ] **BUG-12** — after `source /etc/os-release` (`:31`), fail loudly when `${UBUNTU_CODENAME:-$VERSION_CODENAME}` is empty instead of writing an empty `Suites:` line.
 - [ ] Consider splitting Docker Desktop (GUI, `:48-58`) from Docker Engine, or gating it — see D3.
 

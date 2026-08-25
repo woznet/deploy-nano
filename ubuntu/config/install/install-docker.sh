@@ -18,6 +18,17 @@ warn() {
     echo -e "${BLUE}[$(date +'%T')]${NC} ${ORANGE_RED}$1${NC}" >&2
 }
 
+# Script scope, not local to main(): the EXIT trap fires after main() has
+# returned, and a local would be out of scope and expand to the empty string.
+docker_desktop_deb=''
+
+cleanup() {
+    if [ -n "$docker_desktop_deb" ]; then
+        rm -f "$docker_desktop_deb"
+    fi
+}
+trap cleanup EXIT
+
 main() {
     log "Starting Docker ecosystem installation..."
 
@@ -54,17 +65,14 @@ main() {
     # 5. Download and Install Docker Desktop
     log "Downloading Docker Desktop..."
     local desktop_url="https://desktop.docker.com/linux/main/amd64/docker-desktop-amd64.deb"
-    local temp_deb="/tmp/docker-desktop.deb"
+    docker_desktop_deb=$(mktemp --suffix=.deb)
 
-    # Download the deb file to the /tmp directory
-    curl -fsSL "$desktop_url" -o "$temp_deb"
+    # Download the deb file to a private temp path; cleanup() removes it
+    curl -fsSL "$desktop_url" -o "$docker_desktop_deb"
 
     log "Installing Docker Desktop (This may take a minute to pull GUI dependencies)..."
     # Installing via apt instead of dpkg ensures all missing GUI dependencies are pulled automatically
-    sudo DEBIAN_FRONTEND=noninteractive apt-get install -qq -y "$temp_deb"
-
-    # Clean up the downloaded deb file
-    rm -f "$temp_deb"
+    sudo DEBIAN_FRONTEND=noninteractive apt-get install -qq -y "$docker_desktop_deb"
 
     # 6. Post-installation convenience
     local target_user
