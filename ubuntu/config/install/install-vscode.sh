@@ -15,10 +15,10 @@ main() {
 
     log "Installing prerequisites..."
     sudo DEBIAN_FRONTEND=noninteractive apt-get update -qq
-    sudo DEBIAN_FRONTEND=noninteractive apt-get install -qq -y wget gpg
+    sudo DEBIAN_FRONTEND=noninteractive apt-get install -qq -y curl gpg
 
     log "Adding Microsoft GPG key..."
-    wget -qO- https://packages.microsoft.com/keys/microsoft.asc |
+    curl -fsSL https://packages.microsoft.com/keys/microsoft.asc |
         sudo gpg --yes --dearmor --output /usr/share/keyrings/packages.microsoft.gpg
 
     log "Adding VS Code apt repository..."
