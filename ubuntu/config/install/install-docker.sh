@@ -47,6 +47,12 @@ main() {
     log "Configuring the Docker apt repository..."
     source /etc/os-release
     local os_suite="${UBUNTU_CODENAME:-$VERSION_CODENAME}"
+    if [ -z "$os_suite" ]; then
+        warn "Could not determine the distribution codename from /etc/os-release."
+        warn "Neither UBUNTU_CODENAME nor VERSION_CODENAME is set; refusing to"
+        warn "write an apt source with an empty 'Suites:' line."
+        exit 1
+    fi
 
     local arch
     arch=$(dpkg --print-architecture)

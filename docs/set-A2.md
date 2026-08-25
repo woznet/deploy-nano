@@ -47,7 +47,21 @@
     three exit paths: success (exit 0), `curl` failing on the Desktop
     download (exit 22), and `apt-get` failing on the `.deb` (exit 100). No
     `/tmp/docker-desktop.deb` is created any more.
-- [ ] **BUG-12** — after `source /etc/os-release` (`:31`), fail loudly when `${UBUNTU_CODENAME:-$VERSION_CODENAME}` is empty instead of writing an empty `Suites:` line.
+- [x] **BUG-12** — after `source /etc/os-release` (`:31`), fail loudly when `${UBUNTU_CODENAME:-$VERSION_CODENAME}` is empty instead of writing an empty `Suites:` line.
+  - **Done.** A `[ -z "$os_suite" ]` guard now aborts with three `warn`
+    lines and `exit 1`, before the `tee` that writes
+    `/etc/apt/sources.list.d/docker.sources`. The A2-3 `EXIT` trap still
+    fires on this path.
+  - Verified two ways: against the real `/etc/os-release` the source file
+    is still written correctly (`Suites: resolute` on Ubuntu 26.04); against
+    a fixture setting neither `UBUNTU_CODENAME` nor `VERSION_CODENAME` the
+    script exits 1 and no source file is written. The second case needed a
+    throwaway copy of the script whose `source` path was redirected to the
+    fixture (a one-line `sed`), since the guard reads a real system file.
+  - **Not done, and not asked for:** the report also notes that `source`
+    leaks `NAME`, `VERSION`, `ID`, ... into the global namespace. The
+    checklist item covers only the empty-suite check, so the leak is left
+    alone.
 - [ ] Consider splitting Docker Desktop (GUI, `:48-58`) from Docker Engine, or gating it — see D3.
 
 **Verify:** `bash -n` + `shellcheck`; run on a clean Ubuntu VM **non-interactively** (`bash install-docker.sh < /dev/null`) and confirm it runs to completion without blocking, that `/tmp` holds no leftover `.deb`, and that `getent group docker` lists the invoking user.
