@@ -5,6 +5,71 @@ set -o pipefail
 ORANGE_RED='\033[38;2;255;69;0m'
 NC='\033[0m'
 
+# --- Console display helpers (stdout only; never written to $LOGFILE) ---
+SCRIPT_START=$SECONDS
+COUNT_OK=0
+COUNT_SKIP=0
+COUNT_WARN=0
+COUNT_FAIL=0
+WARNINGS=()
+FAILURES=()
+
+# Counters use VAR=$((VAR+1)) because ((VAR++)) returns status 1 when the
+# pre-increment value is 0, which would abort the script under set -e.
+c_phase() {
+    echo ''
+    echo "==> [$1/7] $2"
+}
+
+c_ok() {
+    COUNT_OK=$((COUNT_OK+1))
+    echo "  [ OK ] $1"
+}
+
+c_skip() {
+    COUNT_SKIP=$((COUNT_SKIP+1))
+    echo "  [SKIP] $1"
+}
+
+c_warn() {
+    COUNT_WARN=$((COUNT_WARN+1))
+    WARNINGS+=("$1")
+    echo -e "  ${ORANGE_RED}[WARN] $1${NC}"
+}
+
+c_fail() {
+    COUNT_FAIL=$((COUNT_FAIL+1))
+    FAILURES+=("$1")
+    echo -e "  ${ORANGE_RED}[FAIL] $1${NC}"
+}
+
+c_info() {
+    echo "  [INFO] $1"
+}
+
+print_summary() {
+    local elapsed elapsed_str msg
+    elapsed=$((SECONDS - SCRIPT_START))
+    elapsed_str="$((elapsed % 60))s"
+    if ((elapsed >= 60)); then
+        elapsed_str="$((elapsed / 60))m $elapsed_str"
+    fi
+    echo ''
+    echo '----------------------------------------------------------'
+    printf ' %-40s %16s\n' 'Deployment summary' "elapsed $elapsed_str"
+    echo " [ OK ] $COUNT_OK    [SKIP] $COUNT_SKIP    [WARN] $COUNT_WARN    [FAIL] $COUNT_FAIL"
+    if ((${#WARNINGS[@]} > 0)); then
+        echo ' Warnings:'
+        for msg in "${WARNINGS[@]}"; do echo "   - $msg"; done
+    fi
+    if ((${#FAILURES[@]} > 0)); then
+        echo ' Failures:'
+        for msg in "${FAILURES[@]}"; do echo "   - $msg"; done
+    fi
+    echo " Full log: $LOGFILE"
+    echo '----------------------------------------------------------'
+}
+
 # Configuration variables shared across all scripts
 PWSH_PROFILE_URL='https://raw.githubusercontent.com/woznet/deploy-nano/main/ubuntu/config/profile.ps1'
 PWSH_CONFIG_URL='https://raw.githubusercontent.com/woznet/deploy-nano/main/ubuntu/config/Invoke-ConfigPwsh.ps1'
@@ -25,16 +90,15 @@ export DEBIAN_FRONTEND=noninteractive
 # Define the functions that will be used in the script
 check_dependency() {
     command -v "$1" >/dev/null 2>&1 || {
-        echo -e "${ORANGE_RED}Error: Required command '$1' not found.${NC}\n" >&2
+        c_fail "Required command '$1' not found."
         exit 1
     }
 }
 
 setup_completions() {
-    echo "Deploying shell completions..."
-
     # Define variables locally to prevent global scope leakage
     local target_dir timestamp error_log error_msg
+    local -a generated=() skipped=() failed=()
     target_dir="$HOME/.local/share/bash-completion/completions"
     timestamp=$(date +'%Y%m%d_%H%M%S')
     error_log="error_log_${timestamp}.txt"
@@ -69,26 +133,27 @@ setup_completions() {
         value="${command_completions[$key]}"
         output_file="${target_dir}/${key}" # Removed _completion suffix
 
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [INFO] Generating command completion for key: $key" | tee -a "$error_log"
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [INFO] Generating command completion for key: $key" >>"$error_log"
 
         # Ensure the command exists before generating
         local command_name
         command_name=$(echo "$value" | awk '{print $1}')
         if ! command -v "$command_name" &>/dev/null; then
             error_msg="[$key] Command '$command_name' not found. Skipping."
-            echo -e "${ORANGE_RED}${error_msg}${NC}"
             echo "[$(date)] $error_msg" >>"$error_log"
+            skipped+=("$key")
             continue
         fi
 
         # Generate output directly into the file (No sudo or tee needed)
         if eval "$value" >"$output_file" 2>>"$error_log"; then
             chmod 644 "$output_file"
-            echo "[$(date '+%Y-%m-%d %H:%M:%S')] [INFO] Successfully generated $key completion. Saved to $output_file." | tee -a "$error_log"
+            echo "[$(date '+%Y-%m-%d %H:%M:%S')] [INFO] Successfully generated $key completion. Saved to $output_file." >>"$error_log"
+            generated+=("$key")
         else
             error_msg="[$key] Failed to generate output for '$value'. Skipping."
-            echo -e "${ORANGE_RED}${error_msg}${NC}"
             echo "[$(date)] $error_msg" >>"$error_log"
+            failed+=("$key")
         fi
     done
 
@@ -100,27 +165,37 @@ setup_completions() {
         value="${url_completions[$key]}"
         output_file="${target_dir}/${key}" # Removed _completion suffix
 
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [INFO] Downloading URL completion for key: $key from $value" | tee -a "$error_log"
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [INFO] Downloading URL completion for key: $key from $value" >>"$error_log"
 
         # Download directly (No sudo needed)
         if ! curl -fsSL "$value" -o "$output_file"; then
             error_msg="[$key] Failed to download completion script from $value"
-            echo -e "${ORANGE_RED}${error_msg}${NC}"
             echo "[$(date)] $error_msg" >>"$error_log"
+            failed+=("$key")
             continue
         fi
 
         if ! chmod 644 "$output_file"; then
             error_msg="[$key] Failed to set permissions on $output_file."
-            echo -e "${ORANGE_RED}${error_msg}${NC}"
             echo "[$(date)] $error_msg" >>"$error_log"
+            failed+=("$key")
             continue
         fi
 
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [INFO] Successfully downloaded $key completion. Saved to $output_file." | tee -a "$error_log"
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [INFO] Successfully downloaded $key completion. Saved to $output_file." >>"$error_log"
+        generated+=("$key")
     done
 
-    echo "All completion scripts have been processed."
+    local names
+    if ((${#failed[@]} > 0)); then
+        names="${failed[*]}"
+        c_warn "Shell completions: ${#generated[@]} generated, ${#skipped[@]} skipped, ${#failed[@]} failed (${names// /, })"
+    elif ((${#skipped[@]} > 0)); then
+        names="${skipped[*]}"
+        c_ok "Shell completions: ${#generated[@]} generated, ${#skipped[@]} skipped (${names// /, })"
+    else
+        c_ok "Shell completions: ${#generated[@]} generated"
+    fi
 }
 
 error_handler() {
@@ -134,7 +209,7 @@ error_handler() {
 log() {
     local message="$1"
     local level="${2:-INFO}"
-    echo "[$(date +'%Y-%m-%d %H:%M:%S')] [$level] $message" | tee -a "$LOGFILE"
+    echo "[$(date +'%Y-%m-%d %H:%M:%S')] [$level] $message" >>"$LOGFILE"
 }
 
 log_error() {
@@ -152,13 +227,13 @@ run_command() {
     if [[ $# -eq 1 ]]; then
         local cmd="$1"
         log "Running command (string): $cmd"
-        eval "$cmd" || {
+        eval "$cmd" >>"$LOGFILE" 2>&1 || {
             log_error "Command failed: $cmd"
             error_exit
         }
     else
         log "Running command (args): $*"
-        "$@" || {
+        "$@" >>"$LOGFILE" 2>&1 || {
             log_error "Command failed: $*"
             error_exit
         }
@@ -177,19 +252,19 @@ download_file() {
     fi
     # Download file and handle errors
     if ! curl -fsSL "$url" | $use_sudo tee "$dest" >/dev/null; then
-        echo -e "${ORANGE_RED}Failed to download $url to $dest${NC}\n"
+        c_fail "Failed to download $url to $dest"
         log_error "Failed to download $url"
         error_exit
     fi
     # Set permissions
     if ! $use_sudo chmod 644 "$dest"; then
-        echo -e "${ORANGE_RED}Failed to set permissions for $dest${NC}\n"
+        c_fail "Failed to set permissions for $dest"
         log_error "Failed to set permissions for $dest"
         error_exit
     fi
     # Check if file is empty
     if [ ! -s "$dest" ]; then
-        echo -e "${ORANGE_RED}Downloaded file $dest is empty.${NC}\n"
+        c_fail "Downloaded file $dest is empty."
         log_error "Downloaded file $dest is empty."
         error_exit
     fi
@@ -224,18 +299,21 @@ source_external_script() {
 set_timezone() {
     log 'Setting timezone to America/New_York'
     run_command 'sudo timedatectl set-timezone America/New_York'
+    c_ok 'Timezone set to America/New_York'
 }
 
 check_updates() {
     log 'Starting software update...'
     run_command 'sudo DEBIAN_FRONTEND=noninteractive apt-get update -qq > /dev/null'
     log 'Software update completed successfully.'
+    c_ok 'apt package lists updated'
 }
 
 install_updates() {
     log 'Starting full upgrade...'
     run_command 'sudo DEBIAN_FRONTEND=noninteractive apt-get full-upgrade -qq -y > /dev/null'
     log 'Full upgrade completed successfully.'
+    c_ok 'Full upgrade complete'
 }
 
 install_software() {
@@ -272,6 +350,10 @@ autoconf automake libtool ssh-import-id xorg xrdp xorgxrdp"
 
     run_command "sudo DEBIAN_FRONTEND=noninteractive apt-get install -qq -y $common_pkgs $distro_pkgs > /dev/null"
 
+    local pkg_count
+    pkg_count=$(wc -w <<<"$common_pkgs $distro_pkgs")
+    c_ok "Installed/verified $pkg_count apt packages"
+
     # Kali-only: language-pack equivalent. Ubuntu handles this automatically
     # via the language-pack-* package triggers, so it's a no-op there.
     if [[ "$ID" == "kali" ]]; then
@@ -280,6 +362,7 @@ autoconf automake libtool ssh-import-id xorg xrdp xorgxrdp"
         run_command 'echo "locales locales/locales_to_be_generated multiselect en_US.UTF-8 UTF-8" | sudo debconf-set-selections'
         run_command 'sudo rm -f /etc/default/locale'
         run_command 'sudo DEBIAN_FRONTEND=noninteractive dpkg-reconfigure locales'
+        c_ok 'Locales configured'
     fi
 
     log 'Software installation completed successfully.'
@@ -300,20 +383,22 @@ configure_userenv() {
         # hasn't been written to yet; -t string sets its type.
         if xfconf-query -c xfce4-panel -p /plugins/clock/digital-format -s '%I:%M:%S %p' --create -t string 2>/dev/null; then
             log 'Xfce clock format set to 12-hour.'
+            c_ok 'Clock format set to 12-hour (Xfce)'
         else
-            echo -e "${ORANGE_RED}Warning: Failed to set Xfce clock format (likely needs manual panel config on first Xfce login).${NC}\n"
+            c_warn 'Failed to set Xfce clock format (likely needs manual panel config on first Xfce login)'
             log_error 'Failed to set Xfce clock format via xfconf-query.'
         fi
     elif command -v gsettings &>/dev/null; then
         # GNOME (Ubuntu default).
         if gsettings set org.gnome.desktop.interface clock-format 12h 2>/dev/null; then
             log 'GNOME clock format set to 12-hour.'
+            c_ok 'Clock format set to 12-hour (GNOME)'
         else
-            echo -e "${ORANGE_RED}Warning: Failed to set GNOME clock format.${NC}\n"
+            c_warn 'Failed to set GNOME clock format'
             log_error 'Failed to set GNOME clock format via gsettings.'
         fi
     else
-        echo -e "${ORANGE_RED}Warning: Neither xfconf-query nor gsettings found. Skipping clock format configuration.${NC}\n"
+        c_warn 'Neither xfconf-query nor gsettings found - clock format configuration skipped'
         log_error 'Neither xfconf-query nor gsettings found. Skipping clock format configuration.'
     fi
 
@@ -324,6 +409,7 @@ configure_userenv() {
     # BUGFIX: Changed ~ to $HOME and wrapped in double quotes for safe variable expansion
     run_command "sudo cp --force $HOME/.bashrc /root/.bashrc"
     run_command "sudo ln --force $HOME/.bash_aliases /root/.bash_aliases"
+    c_ok 'Dotfiles deployed (.bashrc, .bash_aliases -> user + root)'
 
     log 'Configuring sudoers, inputrc and needrestart.conf...'
     download_file "$SUDOERS_URL" '/etc/sudoers.d/woz'
@@ -335,12 +421,14 @@ configure_userenv() {
         # Escaped the $ signs (\$) so ShellCheck is happy and Bash ignores the Perl variables.
         run_command "sudo sed -i.bak -e 's/^#[[:space:]]*\$nrconf{verbosity}[[:space:]]*=[[:space:]]*2;\$/\$nrconf{verbosity} = 0;/' /etc/needrestart/needrestart.conf"
     fi
+    c_ok 'System config deployed (sudoers.d/woz, inputrc, needrestart)'
 
     log 'Creating user directories...'
     for dir in "$HOME/git" "$HOME/temp" "$HOME/dev"; do
         # Added -p to mkdir so it doesn't error out if the directory already exists
         [ -d "$dir" ] || run_command "mkdir -p '$dir'"
     done
+    c_ok 'User directories ensured (~/git ~/temp ~/dev)'
 
     log 'User environment configuration setup completed successfully.'
 }
@@ -349,12 +437,14 @@ remove_rhythmbox() {
     source /etc/os-release
     if [[ "$ID" == "kali" ]]; then
         log 'Skipping Rhythmbox/Aisleriot purge - not applicable on Kali.'
+        c_skip 'Rhythmbox/Aisleriot purge - not applicable on Kali'
         return 0
     fi
 
     log 'Starting removal of Rhythmbox and Aisleriot...'
     run_command 'sudo DEBIAN_FRONTEND=noninteractive apt-get purge -qq -y rhythmbox* aisleriot > /dev/null'
     log 'Rhythmbox and Aisleriot removal completed successfully.'
+    c_ok 'Removed rhythmbox & aisleriot'
 }
 
 generate_ssh_keys() {
@@ -368,9 +458,10 @@ generate_ssh_keys() {
         run_command "ssh-keygen -t rsa -b 4096 -C \"$(id --name --user)@$(hostname --fqdn)\" -N '' -f \"$HOME/.ssh/id_rsa\""
 
         log 'SSH key generated successfully.'
+        c_ok 'SSH key generated (~/.ssh/id_rsa)'
     else
-        # echo -e "${ORANGE_RED}Warning: SSH key already exists. Skipping key generation.${NC}\n"
         log 'SSH key already exists.'
+        c_skip 'SSH key already exists (~/.ssh/id_rsa)'
     fi
 }
 
@@ -383,6 +474,7 @@ import_github_ssh_keys() {
 
     if command -v ssh-import-id &>/dev/null; then
         run_command "ssh-import-id gh:$gh_user"
+        c_ok "GitHub SSH keys imported (gh:$gh_user)"
     else
         # Fallback: direct fetch, with dedup against existing keys
         local tmp_keys
@@ -397,7 +489,9 @@ import_github_ssh_keys() {
             rm -f "$tmp_keys"
             chmod 600 "$HOME/.ssh/authorized_keys"
             log "GitHub SSH keys imported successfully."
+            c_ok "GitHub SSH keys imported (gh:$gh_user)"
         else
+            c_warn "Failed to fetch GitHub SSH keys for $gh_user"
             log_error "Failed to fetch GitHub keys for $gh_user"
             rm -f "$tmp_keys"
             return 1
@@ -418,7 +512,7 @@ configure_sshd() {
     # SAFETY: refuse to disable password auth if no authorized_keys exists.
     # This is the difference between a hardened box and a locked-out box.
     if [[ ! -s "$HOME/.ssh/authorized_keys" ]]; then
-        echo -e "${ORANGE_RED}Refusing to disable password auth: $HOME/.ssh/authorized_keys is missing or empty.${NC}\n"
+        c_warn "Refusing to disable password auth: $HOME/.ssh/authorized_keys is missing or empty"
         log_error 'Skipping SSH hardening: no authorized_keys present.'
         return 1
     fi
@@ -448,7 +542,7 @@ EOF
 
     # Validate config before touching the running service
     if ! sudo sshd -t; then
-        echo -e "${ORANGE_RED}Error: sshd config test failed. Not restarting service.${NC}\n"
+        c_fail 'sshd config test failed - service not restarted'
         log_error 'sshd -t failed; refusing to restart ssh service.'
         return 1
     fi
@@ -456,7 +550,7 @@ EOF
     # Verify the drop-in actually took effect (catches the rare case where
     # the Include directive is missing from the main sshd_config)
     if ! sudo sshd -T | grep -qx 'passwordauthentication no'; then
-        echo -e "${ORANGE_RED}Warning: effective sshd config still allows password auth. Drop-in may not be loading - check 'Include /etc/ssh/sshd_config.d/*.conf' in /etc/ssh/sshd_config.${NC}\n"
+        c_warn "sshd drop-in not effective: password auth still enabled (check 'Include /etc/ssh/sshd_config.d/*.conf')"
         log_error 'Effective sshd config did not apply pubkey-only settings.'
         return 1
     fi
@@ -465,6 +559,7 @@ EOF
     run_command 'sudo systemctl restart ssh'
 
     log 'SSH server configured for pubkey-only auth.'
+    c_ok 'sshd hardened: pubkey-only auth active'
 }
 
 install_gh() {
@@ -482,9 +577,10 @@ install_gh() {
         run_command 'sudo DEBIAN_FRONTEND=noninteractive apt-get install -qq -y gh > /dev/null'
 
         log 'GitHub CLI installation completed successfully.'
+        c_ok 'GitHub CLI installed'
     else
-        echo -e "${ORANGE_RED}Warning: GitHub CLI is already installed. Skipping installation.${NC}\n"
         log 'GitHub CLI is already installed.'
+        c_skip 'GitHub CLI already installed'
     fi
 }
 
@@ -504,7 +600,7 @@ install_pwsh() {
             sed 's/^v//')
 
         if [[ -z "$latest_version" || "$latest_version" == "null" ]]; then
-            echo -e "${ORANGE_RED}Warning: Could not determine latest PowerShell version from GitHub. Skipping update check.${NC}\n"
+            c_warn 'Could not check latest PowerShell version - update check skipped'
             log_error 'Could not determine latest PowerShell version. Skipping update check.'
             return 0
         fi
@@ -513,6 +609,7 @@ install_pwsh() {
 
         if [[ "$installed_version" == "$latest_version" ]]; then
             log 'PowerShell is up-to-date. Skipping installation.'
+            c_skip "PowerShell up-to-date ($installed_version)"
             return 0
         fi
 
@@ -520,6 +617,7 @@ install_pwsh() {
         # This handles the case where installed is a newer preview/dev build.
         if [[ "$(printf '%s\n%s' "$installed_version" "$latest_version" | sort -V | head -n1)" != "$installed_version" ]]; then
             log "Installed PowerShell ($installed_version) is newer than latest stable ($latest_version). Skipping installation."
+            c_skip "PowerShell ($installed_version) is newer than latest stable ($latest_version)"
             return 0
         fi
 
@@ -559,7 +657,7 @@ install_pwsh() {
     if [[ $install_ok -eq 0 ]]; then
         log 'Falling back to PowerShell .deb from GitHub releases...'
         if ! install_pwsh_from_github_deb; then
-            echo -e "${ORANGE_RED}Error: PowerShell installation failed via all methods.${NC}\n"
+            c_fail 'PowerShell install failed via all methods'
             log_error 'All PowerShell install methods failed.'
             return 1
         fi
@@ -568,6 +666,11 @@ install_pwsh() {
     run_command "sudo pwsh -NoProfile -Command \"Invoke-Expression ([System.Net.WebClient]::new().DownloadString('$PWSH_CONFIG_URL'))\" > /dev/null"
     download_file "$PWSH_PROFILE_URL" '/opt/microsoft/powershell/7/profile.ps1'
     log 'PowerShell installation completed successfully.'
+    if [[ -n "${installed_version:-}" ]]; then
+        c_ok "PowerShell upgraded ($installed_version -> $latest_version)"
+    else
+        c_ok 'PowerShell installed'
+    fi
 }
 
 install_pwsh_microsoft_repo() {
@@ -674,13 +777,16 @@ install_1password() {
 
         # 4. Install both packages
         log "Updating apt and installing 1Password and CLI..."
-        sudo DEBIAN_FRONTEND=noninteractive apt-get update -qq
-        sudo DEBIAN_FRONTEND=noninteractive apt-get install -qq -y 1password 1password-cli
+        # shellcheck disable=SC2024  # $LOGFILE is user-owned; redirecting as the user is intended
+        sudo DEBIAN_FRONTEND=noninteractive apt-get update -qq >>"$LOGFILE" 2>&1
+        # shellcheck disable=SC2024  # $LOGFILE is user-owned; redirecting as the user is intended
+        sudo DEBIAN_FRONTEND=noninteractive apt-get install -qq -y 1password 1password-cli >>"$LOGFILE" 2>&1
 
         log "1Password and 1Password CLI installed successfully!"
+        c_ok '1Password + CLI installed'
     else
-        echo -e "${ORANGE_RED}Warning: 1Password and 1Password CLI are already installed. Skipping installation.${NC}\n"
         log '1Password and 1Password CLI are already installed.'
+        c_skip '1Password + CLI already installed'
     fi
 }
 
@@ -691,7 +797,6 @@ remove_nano() {
         run_command 'sudo DEBIAN_FRONTEND=noninteractive apt-get purge -qq -y nano > /dev/null'
         log 'Nano removed successfully.'
     else
-        echo -e "${ORANGE_RED}Warning: Nano is not installed. Skipping removal.${NC}\n"
         log 'Nano is not installed.'
     fi
 }
@@ -837,7 +942,7 @@ remove_tmpfiles() {
 run_non_critical() {
     local func="$1"
     if ! $func; then
-        echo -e "${ORANGE_RED}Warning: $func encountered an error.${NC}\n"
+        c_warn "$func failed - see log"
         log_error "$func"
     fi
 }
@@ -856,29 +961,42 @@ download_standalone_scripts_api() {
     download_urls=$(curl -sSL "$api_url" | jq -r '.[].download_url | select(. != null)')
 
     if [[ -z "$download_urls" ]]; then
-        echo -e "${ORANGE_RED}Failed to retrieve script list from GitHub API. Check repo path or API limits.${NC}\n"
+        c_fail 'Standalone scripts: GitHub API returned no download URLs'
         log_error "GitHub API returned no download URLs for $api_url"
         return 1
     fi
+
+    local total=0 ok=0
+    local -a failed_scripts=()
 
     while read -r url; do
         if [[ -n "$url" ]]; then
             local file
             file=$(basename "$url")
+            total=$((total+1))
 
             log "Downloading $file..."
 
             if curl -fsSL "$url" -o "$target_dir/$file"; then
                 chmod +x "$target_dir/$file"
+                ok=$((ok+1))
                 log "Successfully saved and made executable: $file"
             else
-                echo -e "${ORANGE_RED}Failed to download $file${NC}\n"
+                failed_scripts+=("$file")
                 log_error "Failed to download $file from $url"
             fi
         fi
     done <<<"$download_urls"
 
     log "All standalone scripts dynamically synced to $target_dir"
+
+    local names
+    if ((${#failed_scripts[@]} > 0)); then
+        names="${failed_scripts[*]}"
+        c_warn "Standalone scripts: $ok/$total synced - failed: ${names// /, }"
+    else
+        c_ok "Standalone scripts: $ok/$total synced to ~${target_dir#"$HOME"}"
+    fi
 }
 
 # Main script execution starts here
@@ -896,12 +1014,21 @@ chmod 0644 "$LOGFILE" >/dev/null
 
 trap 'error_handler $LINENO' ERR
 
+echo 'deploy-nano :: start-aio-min.sh'
+echo "Log: $LOGFILE"
+
 # Starting function execution
 log 'Starting critical function execution.'
+
+c_phase 1 'System preparation'
 set_timezone || log_error 'set_timezone'
 check_updates || log_error 'check_updates'
 install_updates || log_error 'install_updates'
+
+c_phase 2 'Package installation'
 install_software || log_error 'install_software'
+
+c_phase 3 'User environment'
 configure_userenv || log_error 'configure_userenv'
 
 NANO_INSTALLED_VERSION=$(get_installed_nano_version)
@@ -913,21 +1040,31 @@ NANO_SOURCE_URL="https://nano-editor.org/dist/v${NANO_LATEST_MAJOR_VERSION}/nano
 log 'Starting non-critical function execution.'
 run_non_critical 'remove_rhythmbox'
 # run_non_critical 'generate_ssh_keys'
+
+c_phase 4 'SSH & GitHub access'
 run_non_critical 'import_github_ssh_keys'
 run_non_critical 'configure_sshd'
+
+c_phase 5 'Applications'
 run_non_critical 'install_gh'
 run_non_critical 'install_pwsh'
 run_non_critical 'install_1password'
 
+c_phase 6 'Nano editor'
 if [ "$SHOULD_INSTALL_NANO" = "1" ]; then
+    c_info "Building nano $NANO_LATEST_VERSION from source (may take several minutes)"
     run_non_critical 'remove_nano'
     run_non_critical 'download_nano'
     run_non_critical 'build_nano'
     run_non_critical 'clone_nano_syntax'
     run_non_critical 'configure_nano'
     run_non_critical 'set_default_editor'
+    c_ok "nano $NANO_LATEST_VERSION built, installed & set as default editor"
+else
+    c_skip "nano up-to-date ($NANO_INSTALLED_VERSION) - build skipped"
 fi
 
+c_phase 7 'Completions & scripts'
 log "Setting up shell autocompletions..."
 setup_completions || log_error 'setup_completions'
 
@@ -937,4 +1074,4 @@ download_standalone_scripts_api || log_error 'download_standalone_scripts_api'
 remove_tmpfiles || log_error 'remove_tmpfiles'
 
 log 'All tasks completed successfully.'
-echo 'All tasks completed successfully.'
+print_summary
