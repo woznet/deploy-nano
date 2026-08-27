@@ -1,0 +1,129 @@
+[2026-08-27 01:34:09] [INFO] Starting critical function execution.
+[2026-08-27 01:34:09] [INFO] Setting timezone to America/New_York
+[2026-08-27 01:34:09] [INFO] Running command (string): sudo timedatectl set-timezone America/New_York
+[sudo: authenticate] Password:
+[2026-08-27 01:34:13] [INFO] Starting software update...
+[2026-08-27 01:34:13] [INFO] Running command (string): sudo DEBIAN_FRONTEND=noninteractive apt-get update -qq > /dev/null
+[2026-08-27 01:34:16] [INFO] Software update completed successfully.
+[2026-08-27 01:34:16] [INFO] Starting full upgrade...
+[2026-08-27 01:34:16] [INFO] Running command (string): sudo DEBIAN_FRONTEND=noninteractive apt-get full-upgrade -qq -y > /dev/null
+[2026-08-27 01:34:16] [INFO] Full upgrade completed successfully.
+[2026-08-27 01:34:16] [INFO] Starting installation of required software packages...
+[2026-08-27 01:34:16] [INFO] Running command (string): sudo DEBIAN_FRONTEND=noninteractive apt-get install -qq -y apt-transport-https aptitude aptitude-doc-en curl software-properties-common git autopoint build-essential devhelp freetype2-doc g++-multilib gcc-multilib wget xdg-utils glibc-doc glibc-doc-reference glibc-source groff groff-base clang libasprintf-dev libbsd-dev libc++-dev libc6 libc6-dev libcairo2-dev libcairo2-doc libc-ares-dev python3-pip libc-dev libev-dev libgettextpo-dev libgirepository1.0-dev libglib2.0-doc libice-doc libmagic1 ca-certificates libmagic-dev libmagick++-dev libmagics++-dev libncurses-dev python-is-python3 libsm-doc libx11-doc libxcb-doc libxext-doc libxml2-utils ncurses-doc pkg-config zlib1g-dev net-tools gpg ffmpeg ffmpeg-doc most openssh-client openssh-known-hosts python3 python3-doc p7zip p7zip-full policykit-1-doc rclone unzip zip unrar-free jq ripgrep fzf bat fd-find tree htop btop lsof rsync dnsutils mtr-tiny tmux aspell aspell-en autoconf automake libtool ssh-import-id xorg xrdp xorgxrdp language-pack-en language-pack-en-base libncurses5-dev libncursesw5-dev policykit-desktop-privileges policykit-1-gnome > /dev/null
+[2026-08-27 01:34:17] [INFO] Software installation completed successfully.
+[2026-08-27 01:34:17] [INFO] Starting user environment configuration setup...
+[2026-08-27 01:34:17] [INFO] Checking for existing SSH keys...
+[2026-08-27 01:34:17] [INFO] SSH key already exists.
+[2026-08-27 01:34:17] [INFO] GNOME clock format set to 12-hour.
+[2026-08-27 01:34:17] [INFO] Configuring .bashrc and .bash_aliases...
+[2026-08-27 01:34:17] [INFO] Downloading https://raw.githubusercontent.com/woznet/deploy-nano/main/ubuntu/config/.bashrc to /home/cwalker-admin/.bashrc
+[2026-08-27 01:34:17] [INFO] Downloaded https://raw.githubusercontent.com/woznet/deploy-nano/main/ubuntu/config/.bashrc to /home/cwalker-admin/.bashrc successfully.
+[2026-08-27 01:34:17] [INFO] Downloading https://raw.githubusercontent.com/woznet/deploy-nano/main/ubuntu/config/.bash_aliases to /home/cwalker-admin/.bash_aliases
+[2026-08-27 01:34:17] [INFO] Downloaded https://raw.githubusercontent.com/woznet/deploy-nano/main/ubuntu/config/.bash_aliases to /home/cwalker-admin/.bash_aliases successfully.
+[2026-08-27 01:34:17] [INFO] Running command (string): sudo cp --force /home/cwalker-admin/.bashrc /root/.bashrc
+[2026-08-27 01:34:17] [INFO] Running command (string): sudo ln --force /home/cwalker-admin/.bash_aliases /root/.bash_aliases
+[2026-08-27 01:34:17] [INFO] Configuring sudoers, inputrc and needrestart.conf...
+[2026-08-27 01:34:17] [INFO] Downloading https://raw.githubusercontent.com/woznet/deploy-nano/main/ubuntu/config/sudoers.woz to /etc/sudoers.d/woz
+[2026-08-27 01:34:17] [INFO] Downloaded https://raw.githubusercontent.com/woznet/deploy-nano/main/ubuntu/config/sudoers.woz to /etc/sudoers.d/woz successfully.
+[2026-08-27 01:34:17] [INFO] Downloading https://raw.githubusercontent.com/woznet/deploy-nano/main/ubuntu/config/inputrc to /etc/inputrc
+[2026-08-27 01:34:18] [INFO] Downloaded https://raw.githubusercontent.com/woznet/deploy-nano/main/ubuntu/config/inputrc to /etc/inputrc successfully.
+[2026-08-27 01:34:18] [INFO] Running command (string): sudo sed -i.bak -e 's/^#[[:space:]]*$nrconf{verbosity}[[:space:]]*=[[:space:]]*2;$/$nrconf{verbosity} = 0;/' /etc/needrestart/needrestart.conf
+[2026-08-27 01:34:18] [INFO] Creating user directories...
+[2026-08-27 01:34:18] [INFO] User environment configuration setup completed successfully.
+[2026-08-27 01:34:18] [INFO] Starting non-critical function execution.
+[2026-08-27 01:34:18] [INFO] Starting removal of Rhythmbox and Aisleriot...
+[2026-08-27 01:34:18] [INFO] Running command (string): sudo DEBIAN_FRONTEND=noninteractive apt-get purge -qq -y rhythmbox* aisleriot > /dev/null
+[2026-08-27 01:34:19] [INFO] Rhythmbox and Aisleriot removal completed successfully.
+[2026-08-27 01:34:19] [INFO] Importing SSH keys from GitHub user: woznet
+[2026-08-27 01:34:19] [INFO] Running command (string): ssh-import-id gh:woznet
+2026-08-27 01:34:19,589 INFO Already authorized ['256', 'SHA256:FBGo0mDLbntrw/3WxHoiiHuc/3k3yNtSKyAo5KFad7Y', 'woznet@github/155212765', '(ED25519)']
+2026-08-27 01:34:19,589 INFO [1] SSH keys [Authorized]
+[2026-08-27 01:34:19] [INFO] Configuring SSH server for pubkey-only authentication...
+[2026-08-27 01:34:19] [INFO] Writing SSH hardening drop-in to /etc/ssh/sshd_config.d/99-pubkey-only.conf...
+Warning: effective sshd config still allows password auth. Drop-in may not be loading - check 'Include /etc/ssh/sshd_config.d/*.conf' in /etc/ssh/sshd_config.
+
+[2026-08-27 01:34:19] [ERROR] Effective sshd config did not apply pubkey-only settings.
+Warning: configure_sshd encountered an error.
+
+[2026-08-27 01:34:19] [ERROR] configure_sshd
+[2026-08-27 01:34:19] [INFO] Starting installation of GitHub CLI...
+Warning: GitHub CLI is already installed. Skipping installation.
+
+[2026-08-27 01:34:19] [INFO] GitHub CLI is already installed.
+[2026-08-27 01:34:19] [INFO] Starting installation of PowerShell...
+[2026-08-27 01:34:19] [INFO] Installed PowerShell version: 7.6.5
+[2026-08-27 01:34:20] [INFO] Latest PowerShell version available: 7.6.5
+[2026-08-27 01:34:20] [INFO] PowerShell is up-to-date. Skipping installation.
+[2026-08-27 01:34:20] [INFO] Starting 1Password and 1Password CLI installation...
+Warning: 1Password and 1Password CLI are already installed. Skipping installation.
+
+[2026-08-27 01:34:20] [INFO] 1Password and 1Password CLI are already installed.
+[2026-08-27 01:34:20] [INFO] Setting up shell autocompletions...
+Deploying shell completions...
+[2026-08-27 01:34:20] [INFO] Generating command completion for key: rclone
+[2026-08-27 01:34:20] [INFO] Successfully generated rclone completion. Saved to /home/cwalker-admin/.local/share/bash-completion/completions/rclone.
+[2026-08-27 01:34:20] [INFO] Generating command completion for key: ngrok
+[ngrok] Command 'ngrok' not found. Skipping.
+[2026-08-27 01:34:20] [INFO] Generating command completion for key: pip
+[2026-08-27 01:34:20] [INFO] Successfully generated pip completion. Saved to /home/cwalker-admin/.local/share/bash-completion/completions/pip.
+[2026-08-27 01:34:20] [INFO] Generating command completion for key: npm
+[npm] Command 'npm' not found. Skipping.
+[2026-08-27 01:34:20] [INFO] Generating command completion for key: dotnet
+[dotnet] Command 'dotnet' not found. Skipping.
+[2026-08-27 01:34:20] [INFO] Generating command completion for key: op
+[2026-08-27 01:34:20] [INFO] Successfully generated op completion. Saved to /home/cwalker-admin/.local/share/bash-completion/completions/op.
+[2026-08-27 01:34:20] [INFO] Generating command completion for key: gh
+[2026-08-27 01:34:20] [INFO] Successfully generated gh completion. Saved to /home/cwalker-admin/.local/share/bash-completion/completions/gh.
+[2026-08-27 01:34:20] [INFO] Downloading URL completion for key: tldr from https://raw.githubusercontent.com/tldr-pages/tldr-node-client/main/bin/completion/bash/tldr
+[2026-08-27 01:34:20] [INFO] Successfully downloaded tldr completion. Saved to /home/cwalker-admin/.local/share/bash-completion/completions/tldr.
+[2026-08-27 01:34:20] [INFO] Downloading URL completion for key: az from https://raw.githubusercontent.com/Azure/azure-cli/dev/az.completion
+[2026-08-27 01:34:20] [INFO] Successfully downloaded az completion. Saved to /home/cwalker-admin/.local/share/bash-completion/completions/az.
+[2026-08-27 01:34:20] [INFO] Downloading URL completion for key: clang from https://raw.githubusercontent.com/llvm-mirror/clang/master/utils/bash-autocomplete.sh
+[2026-08-27 01:34:20] [INFO] Successfully downloaded clang completion. Saved to /home/cwalker-admin/.local/share/bash-completion/completions/clang.
+All completion scripts have been processed.
+[2026-08-27 01:34:20] [INFO] Saving standalone install scripts from GitHub API...
+[2026-08-27 01:34:20] [INFO] Querying GitHub API for standalone scripts...
+[2026-08-27 01:34:21] [INFO] Downloading enable-gnome-rdp.sh...
+[2026-08-27 01:34:21] [INFO] Successfully saved and made executable: enable-gnome-rdp.sh
+[2026-08-27 01:34:21] [INFO] Downloading install-1password.sh...
+[2026-08-27 01:34:21] [INFO] Successfully saved and made executable: install-1password.sh
+[2026-08-27 01:34:21] [INFO] Downloading install-azcli.sh...
+[2026-08-27 01:34:21] [INFO] Successfully saved and made executable: install-azcli.sh
+[2026-08-27 01:34:21] [INFO] Downloading install-bun.sh...
+[2026-08-27 01:34:21] [INFO] Successfully saved and made executable: install-bun.sh
+[2026-08-27 01:34:21] [INFO] Downloading install-chrome.sh...
+[2026-08-27 01:34:21] [INFO] Successfully saved and made executable: install-chrome.sh
+[2026-08-27 01:34:21] [INFO] Downloading install-claude.sh...
+[2026-08-27 01:34:22] [INFO] Successfully saved and made executable: install-claude.sh
+[2026-08-27 01:34:22] [INFO] Downloading install-codex.sh...
+[2026-08-27 01:34:22] [INFO] Successfully saved and made executable: install-codex.sh
+[2026-08-27 01:34:22] [INFO] Downloading install-copilot.sh...
+[2026-08-27 01:34:22] [INFO] Successfully saved and made executable: install-copilot.sh
+[2026-08-27 01:34:22] [INFO] Downloading install-docker.sh...
+[2026-08-27 01:34:22] [INFO] Successfully saved and made executable: install-docker.sh
+[2026-08-27 01:34:22] [INFO] Downloading install-fnm.sh...
+[2026-08-27 01:34:22] [INFO] Successfully saved and made executable: install-fnm.sh
+[2026-08-27 01:34:23] [INFO] Downloading install-homebrew.sh...
+[2026-08-27 01:34:23] [INFO] Successfully saved and made executable: install-homebrew.sh
+[2026-08-27 01:34:23] [INFO] Downloading install-ngrok.sh...
+[2026-08-27 01:34:23] [INFO] Successfully saved and made executable: install-ngrok.sh
+[2026-08-27 01:34:23] [INFO] Downloading install-node.sh...
+[2026-08-27 01:34:23] [INFO] Successfully saved and made executable: install-node.sh
+[2026-08-27 01:34:23] [INFO] Downloading install-nvm.sh...
+[2026-08-27 01:34:23] [INFO] Successfully saved and made executable: install-nvm.sh
+[2026-08-27 01:34:23] [INFO] Downloading install-openclaw.sh...
+[2026-08-27 01:34:23] [INFO] Successfully saved and made executable: install-openclaw.sh
+[2026-08-27 01:34:23] [INFO] Downloading install-pnpm.sh...
+[2026-08-27 01:34:23] [INFO] Successfully saved and made executable: install-pnpm.sh
+[2026-08-27 01:34:23] [INFO] Downloading install-qemu.sh...
+[2026-08-27 01:34:23] [INFO] Successfully saved and made executable: install-qemu.sh
+[2026-08-27 01:34:23] [INFO] Downloading install-tailscale.sh...
+[2026-08-27 01:34:24] [INFO] Successfully saved and made executable: install-tailscale.sh
+[2026-08-27 01:34:24] [INFO] Downloading install-vscode.sh...
+[2026-08-27 01:34:24] [INFO] Successfully saved and made executable: install-vscode.sh
+[2026-08-27 01:34:24] [INFO] All standalone scripts dynamically synced to /home/cwalker-admin/dev/scripts
+[2026-08-27 01:34:24] [INFO] Deleting temporary files in /tmp directory...
+[2026-08-27 01:34:24] [INFO] Running command (string): sudo rm -f '/tmp/nanosyntaxpath.tmp' '/tmp/nanobuildpath.tmp' > /dev/null
+[2026-08-27 01:34:24] [INFO] Temporary files deleted successfully.
+[2026-08-27 01:34:24] [INFO] All tasks completed successfully.
+All tasks completed successfully.
