@@ -953,7 +953,7 @@ download_standalone_scripts_api() {
     local target_dir="$HOME/dev/scripts"
 
     # The GitHub REST API endpoint for your specific repository folder
-    local api_url="https://api.github.com/repos/woznet/deploy-nano/contents/ubuntu/config/install"
+    local api_url="https://api.github.com/repos/woznet/deploy-nano/contents/ubuntu/config/scripts"
 
     mkdir -p "$target_dir"
 
