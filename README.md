@@ -1,52 +1,43 @@
 # Deploy-nano
 
-## **Ubuntu**
+Ubuntu workstation setup — configures the shell environment, installs essential software, and builds the latest [nano][4] with [syntax highlighting][1].
 
-- edit config files
-- install apps like [powershell][6], [gh][7], [nvm][8]
-- build [nano][4] (script checks for latest release of nano)
-- add [nanorc syntax][1]
+## Quick Install
 
-### V4 - Run start-aio-min.sh - [start-aio-min.sh][11]
+Run [start-aio-min.sh][11] to start the setup:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/woznet/deploy-nano/main/ubuntu/v4/start-aio-min.sh | bash
 ```
 
----
+## What it does
 
-## **Windows**
+- Configures `.bashrc`, `.bash_aliases`, `inputrc`, and `sudoers`
+- Installs apt packages plus [PowerShell (pwsh)][6], [GitHub CLI (gh)][7], and 1Password + CLI
+- Generates an SSH key, imports GitHub public keys, and hardens sshd (pubkey-only)
+- Builds [nano][4] from source (latest release) and adds [nanorc syntax highlighting][1]
+- Sets up bash completions
+- Syncs the standalone helper scripts to `~/dev/scripts`
 
-- download [nano-win][2]
-- add [nanorc syntax][1]
+## Standalone scripts
 
-### Run for Windows - [deploy.ps1][9]
+[`ubuntu/config/scripts/`][12] holds standalone installers (`install-docker.sh`, `install-vscode.sh`, `install-node.sh`, `install-nvm.sh`, and more) that can each be run on their own — the main script also copies them all to `~/dev/scripts`.
 
-```powershell
-Invoke-Expression ([System.Net.WebClient]::new().DownloadString('https://raw.githubusercontent.com/woznet/deploy-nano/main/windows/deploy.ps1'))
-```
+## Sources
 
----
-
-### Sources
-
-- source of nanorc syntax - <https://github.com/galenguyer/nano-syntax-highlighting>
-- nano-win - <https://github.com/lhmouse/nano-win>
-  - exe - <https://files.lhmouse.com/nano-win/>
-- nvm - <https://github.com/nvm-sh/nvm>
+- nanorc syntax highlighting - <https://github.com/galenguyer/nano-syntax-highlighting>
 - nano - <https://git.savannah.gnu.org/git/nano.git>
+- nvm - <https://github.com/nvm-sh/nvm>
 
-### Other helpful links
+## Other helpful links
 
 - BLFS page for nano - <https://www.linuxfromscratch.org/blfs/view/svn/postlfs/nano.html>
 - MS Docs PowerShell Install - <https://learn.microsoft.com/en-us/powershell/scripting/install/install-ubuntu>
 - gh - <https://github.com/cli/cli/blob/trunk/docs/install_linux.md>
 
 [1]: https://github.com/galenguyer/nano-syntax-highlighting
-[2]: https://github.com/lhmouse/nano-win
-[4]: https://www.nano-editor.org/dist/latest/nano-8.7.tar.xz
+[4]: https://www.nano-editor.org/
 [6]: https://learn.microsoft.com/en-us/powershell/scripting/install/install-ubuntu
 [7]: https://github.com/cli/cli/blob/trunk/docs/install_linux.md#debian-ubuntu-linux-raspberry-pi-os-apt
-[8]: https://github.com/nvm-sh/nvm
-[9]: https://github.com/woznet/deploy-nano/blob/main/windows/deploy.ps1
 [11]: https://github.com/woznet/deploy-nano/blob/main/ubuntu/v4/start-aio-min.sh
+[12]: https://github.com/woznet/deploy-nano/tree/main/ubuntu/config/scripts

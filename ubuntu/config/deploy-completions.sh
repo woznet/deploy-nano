@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # deploy-completions.sh
 
 # Ensure the completions directory exists

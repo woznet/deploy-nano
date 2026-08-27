@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 set -e
 set -o pipefail
 
@@ -28,7 +28,7 @@ usage() {
 
 SKIP_OPTIONAL="${OPENCLAW_SKIP_OPTIONAL:-0}"
 NODE_TARGET_MAJOR="${NODE_TARGET_MAJOR:-26}"
-RAW_BASE_URL='https://raw.githubusercontent.com/woznet/deploy-nano/main/ubuntu/config/install'
+RAW_BASE_URL='https://raw.githubusercontent.com/woznet/deploy-nano/main/ubuntu/config/scripts'
 SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 
 while [ $# -gt 0 ]; do
