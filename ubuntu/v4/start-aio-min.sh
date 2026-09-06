@@ -567,14 +567,27 @@ install_gh() {
 
     # BUGFIX: Test the exit code directly, no subshell or brackets needed
     if ! command -v gh &>/dev/null; then
-        run_command 'curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg'
-        run_command 'sudo chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg'
+        local keyring='/etc/apt/keyrings/githubcli-archive-keyring.gpg'
+        local tmp_keyring
+        tmp_keyring=$(mktemp)
+
+        run_command 'sudo mkdir -p -m 755 /etc/apt/keyrings'
+
+        # Download to a temp file first so a failed transfer can't leave a truncated keyring in place
+        run_command "curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg -o ${tmp_keyring}"
+        run_command "sudo install -m 0644 ${tmp_keyring} ${keyring}"
+        rm -f "${tmp_keyring}"
+
+        run_command 'sudo mkdir -p -m 755 /etc/apt/sources.list.d'
 
         # BUGFIX: Outer double quotes so $(dpkg ...) expands. Escaped inner double quotes. Added >/dev/null for silence.
-        run_command "echo \"deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main\" | sudo tee /etc/apt/sources.list.d/github-cli.list >/dev/null"
+        run_command "echo \"deb [arch=$(dpkg --print-architecture) signed-by=${keyring}] https://cli.github.com/packages stable main\" | sudo tee /etc/apt/sources.list.d/github-cli.list >/dev/null"
 
         run_command 'sudo DEBIAN_FRONTEND=noninteractive apt-get update -qq > /dev/null'
         run_command 'sudo DEBIAN_FRONTEND=noninteractive apt-get install -qq -y gh > /dev/null'
+
+        # Remove the keyring from the old location if a previous run put it there
+        run_command 'sudo rm -f /usr/share/keyrings/githubcli-archive-keyring.gpg'
 
         log 'GitHub CLI installation completed successfully.'
         c_ok 'GitHub CLI installed'
@@ -584,22 +597,56 @@ install_gh() {
     fi
 }
 
+# Resolve the PowerShell install root (PSHOME) so the profile path isn't
+# hardcoded to a major version. Prefer $PSHOME from pwsh itself, since on
+# distro-packaged builds (Kali) pwsh is a real file in /usr/bin and the
+# symlink walk would resolve to /usr/bin rather than the assembly directory.
+get_pwsh_home() {
+    local pshome
+
+    pshome=$(pwsh -NoProfile -NonInteractive -Command '$PSHOME' 2>/dev/null) || true
+    pshome=${pshome//$'\r'/}
+    pshome=${pshome%"${pshome##*[![:space:]]}"}
+
+    if [[ -n "$pshome" && -d "$pshome" ]]; then
+        printf '%s\n' "$pshome"
+        return 0
+    fi
+
+    # Fallback: walk the symlink. Correct for Microsoft repo and GitHub .deb
+    # installs, where /usr/bin/pwsh -> /opt/microsoft/powershell/N/pwsh
+    local resolved
+    resolved=$(readlink -f "$(command -v pwsh)" 2>/dev/null) || true
+    if [[ -n "$resolved" ]]; then
+        pshome=$(dirname "$resolved")
+        if [[ -f "$pshome/pwsh" ]]; then
+            printf '%s\n' "$pshome"
+            return 0
+        fi
+    fi
+
+    return 1
+}
+
 install_pwsh() {
     log 'Starting installation of PowerShell...'
 
+    local installed_version='' latest_version='' final_version=''
+
     # If pwsh is installed, only proceed when GitHub has a newer stable release
     if command -v pwsh &>/dev/null; then
-        local installed_version latest_version
         installed_version=$(pwsh --version 2>/dev/null | awk '{print $NF}')
         log "Installed PowerShell version: $installed_version"
 
         # Fetch latest stable release tag from GitHub (strips the leading 'v').
         # /releases/latest excludes prereleases and drafts, so this is always a stable build.
+        # || true so a curl/pipefail failure reaches the guard below instead of the ERR trap.
+        # A rate-limited response has no .tag_name, so jq yields 'null' and is caught too.
         latest_version=$(curl -fsSL https://api.github.com/repos/PowerShell/PowerShell/releases/latest 2>/dev/null |
             jq -r '.tag_name' |
-            sed 's/^v//')
+            sed 's/^v//') || true
 
-        if [[ -z "$latest_version" || "$latest_version" == "null" ]]; then
+        if [[ -z "$latest_version" || "$latest_version" == 'null' ]]; then
             c_warn 'Could not check latest PowerShell version - update check skipped'
             log_error 'Could not determine latest PowerShell version. Skipping update check.'
             return 0
@@ -626,19 +673,26 @@ install_pwsh() {
         log 'PowerShell not installed. Proceeding with fresh installation.'
     fi
 
-    # Install or upgrade
+    # Install or upgrade.
+    # Declare these local BEFORE sourcing so os-release doesn't leak ID/VERSION/NAME
+    # etc. into the rest of the script. VERSION_ID is absent on Debian testing/sid,
+    # so every use needs a :- default or set -u kills the script.
+    local ID='' VERSION_ID='' ID_LIKE='' NAME='' VERSION='' PRETTY_NAME=''
+    # shellcheck disable=SC1091
     source /etc/os-release
+
     local install_ok=0
 
-    if [[ "$ID" == "kali" ]]; then
+    if [[ "${ID:-}" == 'kali' ]]; then
         # PowerShell ships in Kali's main repo - no Microsoft repo needed
         log 'Installing PowerShell from Kali repos...'
-        if sudo DEBIAN_FRONTEND=noninteractive apt-get install -qq -y powershell >/dev/null; then
+        # shellcheck disable=SC2024  # $LOGFILE is user-owned; redirecting as the user is intended
+        if sudo DEBIAN_FRONTEND=noninteractive apt-get install -qq -y powershell >>"$LOGFILE" 2>&1; then
             install_ok=1
         else
             log 'Kali repo install failed.'
         fi
-    else
+    elif [[ -n "${ID:-}" && -n "${VERSION_ID:-}" ]]; then
         # Ubuntu/Debian path - use Microsoft's repo if they publish for this release
         local ms_repo_url="https://packages.microsoft.com/config/$ID/$VERSION_ID/packages-microsoft-prod.deb"
         if curl -fsSLI -o /dev/null "$ms_repo_url" 2>/dev/null; then
@@ -651,6 +705,8 @@ install_pwsh() {
         else
             log "Microsoft does not publish a config package for $ID $VERSION_ID."
         fi
+    else
+        log "No usable ID/VERSION_ID in /etc/os-release (ID='${ID:-}' VERSION_ID='${VERSION_ID:-}')."
     fi
 
     # Fallback: download the .deb directly from the PowerShell GitHub releases.
@@ -663,45 +719,77 @@ install_pwsh() {
         fi
     fi
 
-    run_command "sudo pwsh -NoProfile -Command \"Invoke-Expression ([System.Net.WebClient]::new().DownloadString('$PWSH_CONFIG_URL'))\" > /dev/null"
-    download_file "$PWSH_PROFILE_URL" '/opt/microsoft/powershell/7/profile.ps1'
-    log 'PowerShell installation completed successfully.'
-    if [[ -n "${installed_version:-}" ]]; then
-        c_ok "PowerShell upgraded ($installed_version -> $latest_version)"
+    # Verify what actually landed rather than assuming we got $latest_version.
+    # Microsoft's repo often trails the GitHub release by days.
+    hash -r 2>/dev/null || true
+    if ! command -v pwsh &>/dev/null; then
+        c_fail 'PowerShell reported installed but pwsh is not on PATH'
+        log_error 'pwsh not found after a reportedly successful install.'
+        return 1
+    fi
+    final_version=$(pwsh --version 2>/dev/null | awk '{print $NF}')
+    log "PowerShell version after install: $final_version"
+
+    local pwsh_home profile_path
+    if pwsh_home=$(get_pwsh_home); then
+        profile_path="$pwsh_home/profile.ps1"
+        log "Resolved PowerShell profile path: $profile_path"
     else
-        c_ok 'PowerShell installed'
+        profile_path='/opt/microsoft/powershell/7/profile.ps1'
+        log_error "Could not resolve PSHOME; falling back to $profile_path"
+        c_warn 'Could not resolve PSHOME - using default profile path'
+    fi
+
+    run_command "sudo pwsh -NoProfile -Command \"Invoke-Expression ([System.Net.WebClient]::new().DownloadString('$PWSH_CONFIG_URL'))\" > /dev/null"
+    download_file "$PWSH_PROFILE_URL" "$profile_path"
+
+    log 'PowerShell installation completed successfully.'
+    if [[ -n "$installed_version" ]]; then
+        if [[ "$final_version" == "$installed_version" ]]; then
+            c_warn "PowerShell still at $installed_version (expected $latest_version)"
+        else
+            c_ok "PowerShell upgraded ($installed_version -> $final_version)"
+        fi
+    else
+        c_ok "PowerShell installed ($final_version)"
     fi
 }
 
 install_pwsh_microsoft_repo() {
     local ms_repo_url="$1"
-    local deb_file='packages-microsoft-prod.deb'
+    local deb_file rc=0
+    deb_file=$(mktemp --suffix=.deb) || return 1
 
-    sudo apt-get update -qq >/dev/null || return 1
-    wget -q -O "$deb_file" "$ms_repo_url" || {
-        rm -f "$deb_file"
-        return 1
-    }
-    sudo dpkg -i "$deb_file" >/dev/null || {
-        rm -f "$deb_file"
-        return 1
-    }
-    sudo DEBIAN_FRONTEND=noninteractive apt-get update -qq >/dev/null || {
-        rm -f "$deb_file"
-        return 1
-    }
+    # Explicit cleanup: a RETURN trap only fires under `set -T`, which this
+    # script doesn't set, so it would silently never run.
+    {
+        sudo DEBIAN_FRONTEND=noninteractive apt-get update -qq >/dev/null &&
+            curl -fsSL -o "$deb_file" "$ms_repo_url" &&
+            sudo dpkg -i "$deb_file" &&
+            sudo DEBIAN_FRONTEND=noninteractive apt-get update -qq >/dev/null &&
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -qq -y powershell >/dev/null
+    } >>"$LOGFILE" 2>&1 || rc=1
+
     rm -f "$deb_file"
-    sudo DEBIAN_FRONTEND=noninteractive apt-get install -qq -y powershell >/dev/null || return 1
-    return 0
+    return $rc
 }
 
 install_pwsh_from_github_deb() {
     local arch tag deb_url release_json deb_file
     arch=$(dpkg --print-architecture)
 
-    release_json=$(curl -fsSL https://api.github.com/repos/PowerShell/PowerShell/releases/latest 2>/dev/null)
+    # || true so a curl failure falls through to the guard below instead of
+    # tripping the ERR trap and killing the script.
+    release_json=$(curl -fsSL https://api.github.com/repos/PowerShell/PowerShell/releases/latest 2>/dev/null) || true
     if [[ -z "$release_json" ]]; then
         log_error 'Could not fetch PowerShell release metadata from GitHub.'
+        return 1
+    fi
+
+    # A rate-limit response is valid JSON, so it passes the check above and then
+    # yields nothing from the extractions below. Catch it here for a clear error.
+    if [[ "$(echo "$release_json" | jq -r '.message // empty')" == *'rate limit'* ]]; then
+        log_error 'GitHub API rate limit exceeded while fetching PowerShell release metadata.'
         return 1
     fi
 
@@ -709,15 +797,18 @@ install_pwsh_from_github_deb() {
 
     # PowerShell publishes assets named like: powershell_7.4.6-1.deb_amd64.deb
     # startswith("powershell_") cleanly excludes powershell-lts_/powershell-preview_ variants.
+    # first() replaces `| head -n1` — under pipefail, head closing the pipe can
+    # SIGPIPE jq and fail the whole assignment.
     deb_url=$(echo "$release_json" |
         jq -r --arg arch "$arch" \
-            '.assets[]
-             | select(.name | startswith("powershell_"))
-             | select(.name | endswith("_" + $arch + ".deb"))
-             | .browser_download_url' |
-        head -n1)
+            'first(
+                 .assets[]
+                 | select(.name | startswith("powershell_"))
+                 | select(.name | endswith("_" + $arch + ".deb"))
+                 | .browser_download_url
+             ) // empty')
 
-    if [[ -z "$deb_url" || "$deb_url" == "null" ]]; then
+    if [[ -z "$deb_url" ]]; then
         log_error "No PowerShell .deb asset found for architecture '$arch' in release '$tag'."
         return 1
     fi
@@ -725,7 +816,8 @@ install_pwsh_from_github_deb() {
     deb_file="/tmp/$(basename "$deb_url")"
 
     log "Downloading $deb_url"
-    if ! wget -q -O "$deb_file" "$deb_url"; then
+    # -L is required: browser_download_url redirects to objects.githubusercontent.com
+    if ! curl -fsSL -o "$deb_file" "$deb_url"; then
         log_error "Failed to download PowerShell .deb from $deb_url"
         rm -f "$deb_file"
         return 1
@@ -744,50 +836,67 @@ install_pwsh_from_github_deb() {
 }
 
 install_1password() {
+    log 'Starting installation of 1Password CLI and desktop app...'
 
-    log "Starting 1Password and 1Password CLI installation..."
-    if ! command -v 1password &>/dev/null || ! command -v op &>/dev/null; then
-        # 1. Add the GPG key
-        log "Adding 1Password GPG key..."
-        # Using --yes to prevent gpg from hanging if the key already exists
-        curl -sS https://downloads.1password.com/linux/keys/1password.asc |
-            sudo gpg --yes --dearmor --output /usr/share/keyrings/1password-archive-keyring.gpg
+    local want_desktop=${INSTALL_1PASSWORD_DESKTOP:-1}
 
-        # 2. Add the apt repository
-        log "Configuring the 1Password apt repository..."
-        local arch
-        arch=$(dpkg --print-architecture)
-
-        # We use double quotes here so the $arch variable expands correctly
-        echo "deb [arch=$arch signed-by=/usr/share/keyrings/1password-archive-keyring.gpg] https://downloads.1password.com/linux/debian/$arch stable main" |
-            sudo tee /etc/apt/sources.list.d/1password.list >/dev/null
-
-        # 3. Configure debsig-verify policy
-        # 1Password uses this to verify the digital signatures of their .deb packages
-        log "Configuring debsig-verify policies for package security..."
-        sudo mkdir -p /etc/debsig/policies/AC2D62742012EA22/
-
-        curl -sS https://downloads.1password.com/linux/debian/debsig/1password.pol |
-            sudo tee /etc/debsig/policies/AC2D62742012EA22/1password.pol >/dev/null
-
-        sudo mkdir -p /usr/share/debsig/keyrings/AC2D62742012EA22
-
-        curl -sS https://downloads.1password.com/linux/keys/1password.asc |
-            sudo gpg --yes --dearmor --output /usr/share/debsig/keyrings/AC2D62742012EA22/debsig.gpg
-
-        # 4. Install both packages
-        log "Updating apt and installing 1Password and CLI..."
-        # shellcheck disable=SC2024  # $LOGFILE is user-owned; redirecting as the user is intended
-        sudo DEBIAN_FRONTEND=noninteractive apt-get update -qq >>"$LOGFILE" 2>&1
-        # shellcheck disable=SC2024  # $LOGFILE is user-owned; redirecting as the user is intended
-        sudo DEBIAN_FRONTEND=noninteractive apt-get install -qq -y 1password 1password-cli >>"$LOGFILE" 2>&1
-
-        log "1Password and 1Password CLI installed successfully!"
-        c_ok '1Password + CLI installed'
-    else
+    if command -v op &>/dev/null && { [[ $want_desktop -ne 1 ]] || command -v 1password &>/dev/null; }; then
         log '1Password and 1Password CLI are already installed.'
         c_skip '1Password + CLI already installed'
+        return
     fi
+
+    local arch keyring policy_id tmp_key tmp_gpg tmp_pol
+    arch=$(dpkg --print-architecture)
+    keyring='/usr/share/keyrings/1password-archive-keyring.gpg'
+    policy_id='AC2D62742012EA22'
+    tmp_key=$(mktemp)
+    tmp_gpg=$(mktemp)
+    tmp_pol=$(mktemp)
+
+    # Fetch and dearmor the signing key once; both keyrings get the same bytes.
+    # -f so an HTTP error page can't be dearmored into a garbage keyring.
+    # --yes because mktemp already created the output file and gpg would prompt.
+    run_command "curl -fsSL https://downloads.1password.com/linux/keys/1password.asc -o ${tmp_key}"
+    run_command "gpg --yes --dearmor --output ${tmp_gpg} ${tmp_key}"
+
+    run_command 'sudo install -d -m 755 /usr/share/keyrings'
+    run_command "sudo install -m 0644 ${tmp_gpg} ${keyring}"
+
+    # BUGFIX: Outer double quotes so $arch expands. Escaped inner double quotes. Added >/dev/null for silence.
+    run_command "echo \"deb [arch=${arch} signed-by=${keyring}] https://downloads.1password.com/linux/debian/${arch} stable main\" | sudo tee /etc/apt/sources.list.d/1password.list >/dev/null"
+
+    # debsig-verify policy. Inert unless dpkg debsig verification is explicitly
+    # enabled, but 1Password's docs ship it, so keep it in place.
+    run_command "curl -fsSL https://downloads.1password.com/linux/debian/debsig/1password.pol -o ${tmp_pol}"
+    run_command "sudo install -d -m 755 /etc/debsig/policies/${policy_id}"
+    run_command "sudo install -m 0644 ${tmp_pol} /etc/debsig/policies/${policy_id}/1password.pol"
+    run_command "sudo install -d -m 755 /usr/share/debsig/keyrings/${policy_id}"
+    run_command "sudo install -m 0644 ${tmp_gpg} /usr/share/debsig/keyrings/${policy_id}/debsig.gpg"
+
+    run_command 'sudo DEBIAN_FRONTEND=noninteractive apt-get update -qq > /dev/null'
+    run_command 'sudo DEBIAN_FRONTEND=noninteractive apt-get install -qq -y 1password-cli > /dev/null'
+    log '1Password CLI installation completed successfully.'
+    c_ok '1Password CLI installed'
+
+    # NOT run_command: the desktop package isn't published for every arch, and a
+    # missing GUI app shouldn't kill the whole deployment. Warn and carry on.
+    if [[ $want_desktop -eq 1 ]]; then
+        log 'Installing 1Password desktop app...'
+        # shellcheck disable=SC2024  # $LOGFILE is user-owned; redirecting as the user is intended
+        if sudo DEBIAN_FRONTEND=noninteractive apt-get install -qq -y 1password >>"$LOGFILE" 2>&1; then
+            log '1Password desktop installation completed successfully.'
+            c_ok '1Password desktop installed'
+        else
+            log_error "1password desktop package unavailable or failed to install on ${arch}."
+            c_warn '1Password desktop not installed (CLI is available)'
+        fi
+    else
+        log 'Skipping 1Password desktop (INSTALL_1PASSWORD_DESKTOP=0).'
+        c_skip '1Password desktop skipped'
+    fi
+
+    rm -f "$tmp_key" "$tmp_gpg" "$tmp_pol"
 }
 
 remove_nano() {
