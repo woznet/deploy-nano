@@ -7,7 +7,7 @@ Ubuntu workstation setup — configures the shell environment, installs essentia
 Run [start-aio-min.sh][11] to start the setup:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/woznet/deploy-nano/main/ubuntu/v4/start-aio-min.sh | bash
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/woznet/deploy-nano/main/ubuntu/v4/start-aio-min.sh)"
 ```
 
 ## What it does
