@@ -273,6 +273,49 @@ download_file() {
     log "Downloaded $url to $dest successfully."
 }
 
+# Download a sudoers fragment to a temp file, validate it with visudo, then
+# install it root:root 0440. A malformed file in /etc/sudoers.d can break sudo
+# entirely, so nothing is written to $dest unless validation passes.
+install_sudoers_file() {
+    local url="$1"
+    local dest="$2"
+    local tmp_file
+    log "Downloading sudoers file $url for validation"
+    tmp_file=$(mktemp)
+
+    if ! curl -fsSL "$url" -o "$tmp_file"; then
+        rm -f "$tmp_file"
+        c_fail "Failed to download $url"
+        log_error "Failed to download $url"
+        error_exit
+    fi
+
+    if [ ! -s "$tmp_file" ]; then
+        rm -f "$tmp_file"
+        c_fail "Downloaded sudoers file from $url is empty."
+        log_error "Downloaded sudoers file from $url is empty."
+        error_exit
+    fi
+
+    # shellcheck disable=SC2024  # $LOGFILE is user-owned; the redirect is meant to run unprivileged
+    if ! sudo visudo -c -f "$tmp_file" >>"$LOGFILE" 2>&1; then
+        rm -f "$tmp_file"
+        c_fail "sudoers file from $url failed visudo validation; $dest left unchanged"
+        log_error "sudoers file from $url failed visudo validation; $dest left unchanged."
+        error_exit
+    fi
+
+    if ! sudo install -m 0440 -o root -g root "$tmp_file" "$dest"; then
+        rm -f "$tmp_file"
+        c_fail "Failed to install $dest"
+        log_error "Failed to install $dest"
+        error_exit
+    fi
+
+    rm -f "$tmp_file"
+    log "Validated and installed $url to $dest successfully."
+}
+
 source_external_script() {
     local tmp_file url
     url="$1"
@@ -414,7 +457,7 @@ configure_userenv() {
     c_ok 'Dotfiles deployed (.bashrc, .bash_aliases -> user + root)'
 
     log 'Configuring sudoers, inputrc and needrestart.conf...'
-    download_file "$SUDOERS_URL" '/etc/sudoers.d/woz'
+    install_sudoers_file "$SUDOERS_URL" '/etc/sudoers.d/woz'
     download_file "$INPUTRC_URL" '/etc/inputrc'
     # download_file "$DISABLE_IPV6_URL" '/etc/sysctl.d/20-disable-ipv6.conf'
 
