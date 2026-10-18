@@ -243,6 +243,7 @@ run_command() {
 download_file() {
     local url="$1"
     local dest="$2"
+    local use_sudo
     log "Downloading $url to $dest"
     # Determine if sudo is needed (check write permission)
     if [[ ! -w "$(dirname "$dest")" ]]; then
@@ -262,8 +263,9 @@ download_file() {
         log_error "Failed to set permissions for $dest"
         error_exit
     fi
-    # Check if file is empty
-    if [ ! -s "$dest" ]; then
+    # Check if file is empty. Use sudo when needed: the current user may not be
+    # able to stat files inside root-only dirs like /etc/sudoers.d (mode 0750).
+    if ! $use_sudo test -s "$dest"; then
         c_fail "Downloaded file $dest is empty."
         log_error "Downloaded file $dest is empty."
         error_exit
