@@ -565,7 +565,12 @@ configure_sshd() {
     # Drop-in config rather than editing /etc/ssh/sshd_config directly.
     # Modern OpenSSH on Debian/Kali Includes /etc/ssh/sshd_config.d/*.conf,
     # so this survives package upgrades cleanly and is easy to revert.
-    local sshd_drop_in='/etc/ssh/sshd_config.d/99-pubkey-only.conf'
+    # sshd uses the FIRST value it sees for each keyword and reads drop-ins in
+    # lexical order, so this must sort before others - e.g. Ubuntu's installer /
+    # cloud-init writes 50-cloud-init.conf with 'PasswordAuthentication yes'.
+    local sshd_drop_in='/etc/ssh/sshd_config.d/00-pubkey-only.conf'
+    # Remove the drop-in name used by earlier versions of this script (it lost to 50-*)
+    sudo rm -f /etc/ssh/sshd_config.d/99-pubkey-only.conf
     log "Writing SSH hardening drop-in to $sshd_drop_in..."
 
     sudo tee "$sshd_drop_in" > /dev/null <<'EOF'
@@ -592,11 +597,16 @@ EOF
         return 1
     fi
 
-    # Verify the drop-in actually took effect (catches the rare case where
-    # the Include directive is missing from the main sshd_config)
-    if ! sudo sshd -T | grep -qx 'passwordauthentication no'; then
-        c_warn "sshd drop-in not effective: password auth still enabled (check 'Include /etc/ssh/sshd_config.d/*.conf')"
-        log_error 'Effective sshd config did not apply pubkey-only settings.'
+    # Verify the drop-in actually took effect (catches a missing Include
+    # directive, or an earlier-sorting file/Match block that still wins).
+    # Capture first: piping into grep -q can SIGPIPE sshd and trip pipefail.
+    local effective_config
+    effective_config=$(sudo sshd -T)
+    if ! grep -qx 'passwordauthentication no' <<<"$effective_config"; then
+        c_warn "sshd drop-in not effective: password auth still enabled (see log for which file sets it)"
+        log_error 'Effective sshd config did not apply pubkey-only settings. PasswordAuthentication is set in:'
+        # shellcheck disable=SC2024  # $LOGFILE is user-owned; the redirect is meant to run unprivileged
+        sudo grep -rHni '^[[:space:]]*PasswordAuthentication' /etc/ssh/sshd_config /etc/ssh/sshd_config.d/ >>"$LOGFILE" 2>&1 || true
         return 1
     fi
 
