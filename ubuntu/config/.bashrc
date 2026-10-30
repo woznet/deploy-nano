@@ -207,8 +207,31 @@ shopt -s histverify
 
 #-+-#-+-#-+-#-+-#
 
-# Immediatedly add command to history
-export PROMPT_COMMAND="history -a; history -c; history -r; $PROMPT_COMMAND"
+# Immediatedly add command to history. Not exported, and guarded so a PROMPT_COMMAND
+# inherited from a parent shell doesn't stack another copy in nested shells.
+if [[ "$PROMPT_COMMAND" != *"history -a; history -c; history -r;"* ]]; then
+    PROMPT_COMMAND="history -a; history -c; history -r; $PROMPT_COMMAND"
+fi
+
+#-+-#-+-#-+-#-+-#
+
+# Deduplicate PATH once per session. The hook runs before the first prompt, so it
+# sees PATH after every startup file (including lines installers append to the end
+# of this file), then removes itself from PROMPT_COMMAND.
+__dedup_path_once() {
+    local entry new_path='' IFS=':'
+    local -a parts
+    local -A seen=()
+    read -ra parts <<<"$PATH"
+    for entry in "${parts[@]}"; do
+        [[ -z "$entry" || -n "${seen[$entry]+x}" ]] && continue
+        seen[$entry]=1
+        new_path+="${new_path:+:}$entry"
+    done
+    export PATH="$new_path"
+    PROMPT_COMMAND="${PROMPT_COMMAND//__dedup_path_once;/}"
+}
+PROMPT_COMMAND="__dedup_path_once;${PROMPT_COMMAND}"
 
 #-+-#-+-#-+-#-+-#
 
