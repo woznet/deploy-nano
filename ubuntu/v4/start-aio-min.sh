@@ -379,7 +379,7 @@ libxml2-utils ncurses-doc pkg-config zlib1g-dev net-tools gpg ffmpeg ffmpeg-doc 
 most openssh-client openssh-known-hosts python3 python3-doc p7zip p7zip-full \
 policykit-1-doc rclone unzip zip unrar-free jq ripgrep fzf \
 bat fd-find tree htop btop lsof rsync dnsutils mtr-tiny tmux aspell aspell-en \
-autoconf automake libtool ssh-import-id xorg xrdp xorgxrdp"
+autoconf automake libtool ssh-import-id xorg xrdp xorgxrdp open-vm-tools"
 
     # Distro-specific extras
     local distro_pkgs=""
